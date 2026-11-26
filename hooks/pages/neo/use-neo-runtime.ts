@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { pickTask } from "@/config/pages/neo/tasks";
-import { agentById, RECON_AGENT_ID } from "@/config/pages/neo/mock-agents";
+import { agentById, BANK2_AGENT_ID, BANK3_AGENT_ID, BANK_AGENT_ID, RECON_AGENT_ID } from "@/config/pages/neo/mock-agents";
 import { adoptSuggestedAgent, getMyAgents } from "@/hooks/pages/neo/use-my-agents";
 import { fallbackFor } from "@/config/pages/neo/doors";
 import type {
@@ -438,7 +438,13 @@ export const useNeoRuntime = () => {
       // Which agent this chat is with, for its header.
       const withAgent = task?.id.startsWith("recon-")
         ? RECON_AGENT_ID
-        : task?.id === "agent-run"
+        : task?.id === "bank-recon-3"
+          ? BANK3_AGENT_ID
+          : task?.id === "bank-recon-2"
+          ? BANK2_AGENT_ID
+          : task?.id === "bank-recon"
+          ? BANK_AGENT_ID
+          : task?.id === "agent-run"
           ? getMyAgents().find(
               (x) =>
                 x.name.toLowerCase() ===
@@ -455,6 +461,28 @@ export const useNeoRuntime = () => {
             name: "Three-way reconciliation",
             goal: "Compare bank statements, payout reports and accounting records",
             data: "Bank, settlement reports and Tally",
+            schedule: "When asked",
+            access: a.access,
+          });
+      }
+      if (
+        task?.id === "bank-recon" ||
+        task?.id === "bank-recon-2" ||
+        task?.id === "bank-recon-3"
+      ) {
+        const a = agentById(
+          task.id === "bank-recon-3"
+            ? BANK3_AGENT_ID
+            : task.id === "bank-recon-2"
+              ? BANK2_AGENT_ID
+              : BANK_AGENT_ID
+        );
+        if (a)
+          adoptSuggestedAgent({
+            id: a.id,
+            name: a.name,
+            goal: "Match your bank statement with Tally and draft what is missing",
+            data: "Bank statement and Tally vouchers",
             schedule: "When asked",
             access: a.access,
           });

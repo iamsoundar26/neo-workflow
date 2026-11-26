@@ -5,7 +5,12 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Bot, Minimize } from "lucide-react";
+import { Bot, FileText, Landmark, Minimize } from "lucide-react";
+import Preview from "@/components/inbox/v2/preview";
+import { useStore } from "@/components/inbox/v2/store";
+import { closeDocPreview, useDocPreview } from "@/hooks/pages/neo/use-doc-preview";
+import { useBankWs } from "@/hooks/pages/neo/use-bank-ws";
+import { useBankFlow } from "@/hooks/pages/neo/use-bank-review";
 import { ChevronLeft, ChevronRight, Maximize, X } from "@/components/icons";
 import { useNeo } from "@/hooks/pages/neo/use-neo";
 import { useRecon } from "@/hooks/pages/neo/use-recon";
@@ -18,9 +23,17 @@ import {
 import { cn } from "@/lib/utils";
 import type { NeoMessage } from "@/types/pages/neo";
 import { CardBody, docIcon, useSignoff } from "./message";
+import { isRefCard } from "./voucher-desk";
 import { useLiveMessage } from "./thread";
 import { AgentBody, MyAgentBody } from "@/components/neo/page/agents/panel";
 import { agentById } from "@/config/pages/neo/mock-agents";
+import BankVoucherPanel from "./bank-voucher-panel";
+import {
+  closeBankPanel,
+  useBankPanel,
+  useBankRun,
+} from "@/hooks/pages/neo/use-bank-recon";
+import { money, shortDate } from "@/config/pages/neo/mock-bank-recon";
 import { useMyAgents } from "@/hooks/pages/neo/use-my-agents";
 
 type Props = {
@@ -143,6 +156,8 @@ const Canvas = ({ variant }: Props) => {
   useEffect(() => () => motion.current?.cancel(), []);
   // The header's title and count read the recon store: follow it.
   useRecon();
+  useBankWs();
+  useBankFlow();
   const live = useLiveMessage(neo);
   // One entry per document: a recon view shown again in the same chat is
   // the same document, updated, so ‹ › steps documents, not showings.
@@ -168,13 +183,41 @@ const Canvas = ({ variant }: Props) => {
     : undefined;
   const agentMode =
     variant === "page" && neo.agentDetails && !!(agentProfile || agentMine);
+  // The bank reconciliation's voucher, opened from a line's card: it takes
+  // the panel over, like the agent's details.
+  const bankLineId = useBankPanel();
+  const bankRun = useBankRun();
+  const bankLine = bankRun?.lines.find((x) => x.line.id === bankLineId);
+  const bankMode = variant === "page" && !!bankLine;
+  // The original file a person attached, opened from their own message.
+  const previewId = useDocPreview();
+  const { items: inboxItems } = useStore();
+  const previewItem = previewId ? inboxItems.find((x) => x.id === previewId && x.status !== "Deleted") : undefined;
+  const previewMode = !!previewId && !bankMode && !agentMode;
+  // Any document opened from the thread takes the panel back from the preview.
+  useEffect(() => {
+    if (neo.canvas) closeDocPreview();
+  }, [neo.canvas]);
   const index = docs.findIndex((d) => d.ids.includes(neo.canvas || ""));
   const doc = docs[index];
   // The live one, when this document is waiting for a sign-off.
   const m = doc && (doc.ids.includes(live?.id || "") ? live! : doc.latest);
 
   useEffect(() => {
-    if (!agentMode) return;
+    if (!bankMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const t = e.target as HTMLElement;
+      if (t.closest("[role=dialog], [role=menu], [role=listbox]")) return;
+      e.preventDefault();
+      closeBankPanel();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [bankMode]);
+
+  useEffect(() => {
+    if (!agentMode || bankMode) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       const t = e.target as HTMLElement;
@@ -184,7 +227,7 @@ const Canvas = ({ variant }: Props) => {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [agentMode, neo]);
+  }, [agentMode, bankMode, neo]);
 
   useEffect(() => {
     if (!m) return;
@@ -202,16 +245,23 @@ const Canvas = ({ variant }: Props) => {
   }, [m, neo, expanded]);
 
   useEffect(() => {
-    if (!m?.card || agentMode) {
+    if (!m?.card || agentMode || bankMode || previewMode) {
       motion.current?.cancel();
       restoring.current = false;
       setExpanded(false);
     }
-  }, [!!m?.card, agentMode]);
+  }, [!!m?.card, agentMode, bankMode, previewMode]);
 
-  if (!m?.card && !agentMode) return null;
+  if (!m?.card && !agentMode && !bankMode && !previewMode) return null;
   const card = m?.card;
-  const { title, meta } = agentMode
+  const { title, meta } = previewMode
+    ? { title: previewItem?.file.name ?? "File", meta: "Original file" }
+    : bankMode
+    ? {
+        title: "Voucher",
+        meta: `${shortDate(bankLine!.line.date)} · ${bankLine!.line.text} · ${money(bankLine!.line.amount)}`,
+      }
+    : agentMode
     ? {
         title: agentProfile?.name ?? agentMine!.name,
         meta: agentMine
@@ -219,11 +269,17 @@ const Canvas = ({ variant }: Props) => {
           : "Agent details",
       }
     : canvasTitle(card!);
-  const waiting = !agentMode && live?.id === m?.id;
+  const waiting = !agentMode && !bankMode && !previewMode && live?.id === m?.id;
   const panel = variant === "panel";
-  const page = agentMode ? true : docShape(card!) !== "record";
-  const Icon = agentMode ? Bot : docIcon(card!);
-  const sheet = !agentMode && card!.kind === "recon-report";
+  const page = agentMode || bankMode || previewMode ? true : docShape(card!) !== "record";
+  const Icon = previewMode ? FileText : bankMode ? Landmark : agentMode ? Bot : docIcon(card!);
+  const sheet =
+    !agentMode &&
+    !bankMode &&
+    (card?.kind === "recon-report" ||
+      card?.kind === "bank-ws" ||
+      card?.kind === "bank-review" ||
+      card?.kind === "voucher-desk");
 
   const paneStyle = panel
     ? {
@@ -319,12 +375,12 @@ const Canvas = ({ variant }: Props) => {
                 </span>
               ) : null}
               {meta}
-              {!agentMode && doc && doc.ids.length > 1
+              {!agentMode && !bankMode && !previewMode && doc && doc.ids.length > 1
                 ? ` · updated ${doc.ids.length === 2 ? "once" : `${doc.ids.length - 1} times`} in this chat`
                 : ""}
             </p>
           </div>
-          {!agentMode && (
+          {!agentMode && !bankMode && !previewMode && (
           <button
             type="button"
             aria-label={expanded ? "Exit full screen" : "Expand panel"}
@@ -346,7 +402,7 @@ const Canvas = ({ variant }: Props) => {
             )}
           </button>
           )}
-          {!agentMode && docs.length > 1 && (
+          {!agentMode && !bankMode && !previewMode && docs.length > 1 && !isRefCard(card) && (
             <div className="flex items-center text-[12px] tabular-nums text-pi-body">
               <button
                 type="button"
@@ -374,17 +430,48 @@ const Canvas = ({ variant }: Props) => {
           )}
           <button
             type="button"
-            aria-label={agentMode ? "Close agent details" : "Close document"}
+            aria-label={
+              previewMode
+                ? "Close file"
+                : bankMode
+                ? "Close voucher"
+                : agentMode
+                  ? "Close agent details"
+                  : "Close document"
+            }
             title="Close (Esc)"
             onClick={() =>
-              agentMode ? neo.setAgentDetails(false) : neo.setCanvas(null)
+              previewMode
+                ? closeDocPreview()
+                : bankMode
+                ? closeBankPanel()
+                : agentMode
+                  ? neo.setAgentDetails(false)
+                  : neo.setCanvas(null)
             }
             className="grid h-8 w-8 flex-none place-items-center rounded-md text-pi-body hover:bg-pi-fill hover:text-pi-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border"
           >
             <X className="h-4 w-4" />
           </button>
         </header>
-        {agentMode ? (
+        {previewMode ? (
+          <div className="neo-canvas flex min-h-0 flex-1 flex-col bg-background" data-testid="source-panel">
+            {previewItem ? (
+              <Preview item={previewItem} />
+            ) : (
+              <div className="flex flex-1 items-center justify-center p-8 text-body-3 text-pi-body">
+                This file is no longer available.
+              </div>
+            )}
+          </div>
+        ) : bankMode ? (
+          <div
+            className="neo-canvas flex min-h-0 flex-1 flex-col bg-background"
+            data-testid="bank-voucher-panel"
+          >
+            <BankVoucherPanel lineId={bankLineId!} onClose={closeBankPanel} />
+          </div>
+        ) : agentMode ? (
           <div className="neo-canvas flex min-h-0 flex-1 flex-col bg-background" data-testid="agent-details">
             {agentProfile ? (
               <AgentBody agent={agentProfile} />

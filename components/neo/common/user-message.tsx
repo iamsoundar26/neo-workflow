@@ -10,6 +10,50 @@ import {
 import type { NeoMessage } from "@/types/pages/neo";
 import { cn } from "@/lib/utils";
 import { IconAction } from "./turn-actions";
+import { useStore } from "@/components/inbox/v2/store";
+import { useNeo } from "@/hooks/pages/neo/use-neo";
+import { openDocPreview } from "@/hooks/pages/neo/use-doc-preview";
+
+/**
+ * An attached file. When it was filed to Voucher Desk it opens the original in
+ * the shared side panel; otherwise it is just a label, as it always was.
+ */
+const AttachmentTile = ({ name }: { name: string }) => {
+  const neo = useNeo();
+  const { items } = useStore();
+  const doc = items.find((x) => x.uploadBatch && x.file.name === name && x.status !== "Deleted");
+  const body = (
+    <>
+      <span className="grid h-7 w-7 flex-none place-items-center rounded-sm bg-pi-fill text-pi-body">
+        <FileText className="h-3.5 w-3.5" />
+      </span>
+      <span className="min-w-0 text-left">
+        <span className="block truncate text-[12px] font-medium leading-4 text-pi-ink">{name}</span>
+        <span className="block text-body-4 uppercase leading-4 text-pi-faint">{name.split(".").pop()}</span>
+      </span>
+    </>
+  );
+  const base =
+    "flex max-w-[13rem] items-center gap-2 rounded-lg border border-pi-line bg-background py-1.5 pl-1.5 pr-2.5 shadow-contact";
+  if (!doc) return <div className={base}>{body}</div>;
+  return (
+    <button
+      type="button"
+      title="Open the original file"
+      data-testid="attachment-open"
+      onClick={() => {
+        neo.setCanvas(null);
+        openDocPreview(doc.id);
+      }}
+      className={cn(
+        base,
+        "transition-colors hover:border-pi-line-2 hover:bg-pi-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border"
+      )}
+    >
+      {body}
+    </button>
+  );
+};
 
 type Props = {
   message: NeoMessage;
@@ -125,21 +169,8 @@ const UserMessage = ({
             ? m.attachments
             : m.attachments.slice(0, 3)
           ).map((a) => (
-            <li
-              key={a.name}
-              className="flex max-w-[13rem] items-center gap-2 rounded-lg border border-pi-line bg-background py-1.5 pl-1.5 pr-2.5 shadow-contact"
-            >
-              <span className="grid h-7 w-7 flex-none place-items-center rounded-sm bg-pi-fill text-pi-body">
-                <FileText className="h-3.5 w-3.5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-[12px] font-medium leading-4 text-pi-ink">
-                  {a.name}
-                </span>
-                <span className="block text-body-4 uppercase leading-4 text-pi-faint">
-                  {a.name.split(".").pop()}
-                </span>
-              </span>
+            <li key={a.name}>
+              <AttachmentTile name={a.name} />
             </li>
           ))}
           {!allFiles && m.attachments.length > 4 && (

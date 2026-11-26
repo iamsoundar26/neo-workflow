@@ -10,6 +10,19 @@ import { NEO_AGENT, SKILLS } from "@/config/pages/neo/skills";
  * DEV: replace with GET /api/neo/agents?company=…
  */
 export const RECON_AGENT_ID = NEO_AGENT.id;
+export const BANK_AGENT_ID = "bank-book";
+export const BANK2_AGENT_ID = "bank-book-2";
+export const BANK3_AGENT_ID = "bank-book-3";
+
+/** The request that starts an agent's run in the chat. */
+export const runPromptFor = (id?: string) =>
+  id === BANK3_AGENT_ID
+    ? "Reconcile my bank statement 3"
+    : id === BANK2_AGENT_ID
+    ? "Reconcile my bank statement 2"
+    : id === BANK_AGENT_ID
+      ? "Reconcile my bank statement"
+      : "Check September";
 
 export const MOCK_AGENTS: AgentProfile[] = [
   {
@@ -28,6 +41,75 @@ export const MOCK_AGENTS: AgentProfile[] = [
     skills: SKILLS.length,
     does: NEO_AGENT.may.slice(0, 3),
     never: NEO_AGENT.never.map((n) => n.text),
+  },
+  {
+    id: BANK_AGENT_ID,
+    name: "Bank reconciliation",
+    category: "Reconciliation",
+    status: "live",
+    goal: "Matches every bank statement line with your Tally vouchers, and drafts a voucher for the rest.",
+    output: "Matched lines",
+    sources: [
+      { label: "Bank statement", from: "PDF or Excel" },
+      { label: "Bank vouchers", from: "Tally" },
+    ],
+    access: "Prepares, you approve",
+    skills: 5,
+    does: [
+      "Reads your statement and finds the bank, dates and transactions",
+      "Matches each line with a Tally voucher, even one line against several",
+      "Drafts a voucher for the rest, ready for you to change",
+    ],
+    never: [
+      "Send anything to Tally before you confirm",
+      "Approve a line you haven't reviewed",
+    ],
+  },
+  {
+    id: BANK2_AGENT_ID,
+    name: "Bank reconciliation 2",
+    category: "Reconciliation",
+    status: "live",
+    goal: "Matches thousands of bank lines with your Tally vouchers in a workspace: approve in bulk, review what differs, and sync.",
+    output: "Reconciliation workspace",
+    sources: [
+      { label: "Bank statement", from: "PDF or Excel" },
+      { label: "Bank vouchers", from: "Tally" },
+    ],
+    access: "Prepares, you approve",
+    skills: 5,
+    does: [
+      "Reads your statement and finds the bank, dates and transactions",
+      "Matches each line with a Tally voucher, even one line against several",
+      "Drafts a voucher for the rest, ready for you to change",
+    ],
+    never: [
+      "Send anything to Tally before you confirm",
+      "Approve a line you haven't reviewed",
+    ],
+  },
+  {
+    id: BANK3_AGENT_ID,
+    name: "Bank reconciliation 3",
+    category: "Reconciliation",
+    status: "live",
+    goal: "Matches thousands of bank lines with your Tally vouchers in a workspace: approve in bulk, review what differs, and sync.",
+    output: "Reconciliation workspace",
+    sources: [
+      { label: "Bank statement", from: "PDF or Excel" },
+      { label: "Bank vouchers", from: "Tally" },
+    ],
+    access: "Prepares, you approve",
+    skills: 5,
+    does: [
+      "Reads your statement and finds the bank, dates and transactions",
+      "Matches each line with a Tally voucher, even one line against several",
+      "Drafts a voucher for the rest, ready for you to change",
+    ],
+    never: [
+      "Send anything to Tally before you confirm",
+      "Approve a line you haven't reviewed",
+    ],
   },
   {
     id: "invoice-assistant",

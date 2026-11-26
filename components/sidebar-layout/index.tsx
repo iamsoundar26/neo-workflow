@@ -13,6 +13,7 @@ import {
   ShoppingBag,
   ShoppingCart,
   RefreshCw,
+  Settings,
   Sparkle,
   UserRound,
 } from "lucide-react";
@@ -131,6 +132,8 @@ const NAV_MAIN = [
 
 const NAV_SECONDARY = [
   { id: "gst", label: "GST", path: "/gst-reconciliation", icon: FileText },
+  { id: "settings", label: "Settings", path: "/inbox?module=SETTINGS", icon: Settings },
+  { id: "bank-recon", label: "Bank recon (test)", path: "/inbox?module=BANKRECON", icon: Landmark },
   {
     id: "configuration",
     label: "Sync Management",

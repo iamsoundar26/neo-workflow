@@ -144,6 +144,8 @@ export type Form = {
   extra?: Record<string, string>;
 };
 export type Item = {
+  /** The Neo chat upload this document arrived in, so a chat can show just its own. */
+  uploadBatch?: string;
   /** Entered by Neo in a batch, under this instruction (Neo voucher entry). */
   batch?: { id: string; instruction: string };
   preparedBy?: {
@@ -160,7 +162,7 @@ export type Item = {
   topChoice: Route;
   confidence: number;
   reason: string;
-  source: "email" | "whatsapp" | "upload";
+  source: "email" | "whatsapp" | "upload" | "neo";
   sender: string;
   subject: string;
   routingAddress: string;
@@ -3004,4 +3006,94 @@ export function neoLog(
     run_id: runId,
     ...properties,
   });
+}
+
+
+/**
+ * Documents a person sent through Neo chat. Each is read and lands in the
+ * Inbox (Voucher Desk) as Needs Review, stamped with the upload's batch id so
+ * the chat can show exactly its own and nothing from earlier uploads.
+ *
+ * Extraction is the cut-from-a-template demo's, with the party, invoice number
+ * and amount the chat names laid over it.
+ *
+ * DEV: POST /api/inbox/documents (multipart) returns the created documents.
+ */
+export type NeoUploadSpec = {
+  name: string;
+  size?: number;
+  route: Route;
+  party?: string;
+  invoiceNo?: string;
+  amount?: number;
+};
+
+export function receiveNeoUpload(batchId: string, files: NeoUploadSpec[]): Item[] {
+  const templates = seed().items.filter(
+    (item) => item.company === state.company && seedable(item) && !item.priorVoucher
+  );
+  const pick = (route: Route, n: number) => {
+    const same = templates.filter((x) => x.route === route);
+    const from = same.length ? same : templates;
+    return from[n % from.length];
+  };
+  const made = files.map((f, n): Item => {
+    const t = structuredClone(pick(f.route, n));
+    const ext = (f.name.split(".").pop() || "pdf").toLowerCase();
+    // The preview prints the document from `original`, so the party, number
+    // and amount the chat names go there too, or the file would show another bill.
+    const o = t.original as unknown as Record<string, any>;
+    const doc = o.bill || o.invoice;
+    if (doc && f.amount != null) {
+      doc.items = [{ ...(doc.items?.[0] || { desc: "Goods and services" }), amount: f.amount }];
+      doc.subTotal = f.amount;
+      doc.taxes = {};
+      doc.grandTotal = f.amount;
+    }
+    if (o.bill && f.invoiceNo) o.bill.supplierInvoiceNo = f.invoiceNo;
+    if (o.invoice && f.invoiceNo) o.invoice.invoiceNo = f.invoiceNo;
+    if (f.party) {
+      if (o.bill) o.vendor = f.party;
+      if (o.invoice) {
+        o.customer = f.party;
+        o.invoice.customer = f.party;
+      }
+    }
+    return {
+      ...t,
+      id: `NEO-${batchId}-${n + 1}`,
+      company: state.company,
+      uploadBatch: batchId,
+      status: "Needs Review",
+      source: "neo",
+      sender: actor,
+      received: new Date().toISOString(),
+      file: { ...t.file, name: f.name, ext, size: f.size ? `${Math.max(1, Math.round(f.size / 1024))} KB` : t.file.size },
+      amount: f.amount ?? t.amount,
+      form: {
+        ...t.form,
+        party: f.party ?? t.form.party,
+        invoiceNo: f.invoiceNo ?? t.form.invoiceNo,
+      },
+      preparedBy: undefined,
+      autoApproved: undefined,
+      autoHold: undefined,
+      batch: undefined,
+      deletedFrom: undefined,
+      doneAt: undefined,
+      doneBy: undefined,
+      snapshot: undefined,
+      hardRef: undefined,
+      softRef: undefined,
+      error: undefined,
+      retries: 0,
+    };
+  });
+  state = {
+    ...state,
+    startedCompanies: [...new Set([...(state.startedCompanies || []), state.company])],
+    items: [...made, ...state.items],
+  };
+  persist();
+  return made;
 }

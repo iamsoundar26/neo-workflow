@@ -6,6 +6,10 @@ import reconExport from "./recon-export";
 import reconEdit from "./recon-edit";
 import agentCreate from "./agent-create";
 import agentRun from "./agent-run";
+import bankRecon from "./bank-recon";
+import bankRecon2 from "./bank-recon-2";
+import bankRecon3 from "./bank-recon-3";
+import voucherUpload from "./voucher-upload";
 
 /**
  * Everything Neo can do in phase one: three-way reconciliation to the AiA
@@ -21,6 +25,10 @@ import agentRun from "./agent-run";
 export const NEO_TASKS: NeoTask[] = [
   agentRun,
   agentCreate,
+  voucherUpload,
+  bankRecon3,
+  bankRecon2,
+  bankRecon,
   reconSetup,
   reconEdit,
   reconExport,

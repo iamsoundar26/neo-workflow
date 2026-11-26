@@ -21,7 +21,7 @@ import {
   ReceiptText,
 } from "lucide-react";
 import type { AgentProfile } from "@/types/pages/neo/agents";
-import { RECON_AGENT_ID } from "@/config/pages/neo/mock-agents";
+import { RECON_AGENT_ID, runPromptFor } from "@/config/pages/neo/mock-agents";
 import { useStartChat } from "@/hooks/pages/neo/use-start-chat";
 import { cn } from "@/lib/utils";
 import { agentHref } from "./bar";
@@ -261,7 +261,7 @@ export const FeaturedAgent = ({
               type="button"
               disabled={!!unavailable}
               title={unavailable}
-              onClick={() => void chat("Reconcile September")}
+              onClick={() => void chat(runPromptFor(agent.id))}
               className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-[14px] font-semibold text-primary-foreground shadow-pi-1 transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pi-brand focus-visible:ring-offset-2 disabled:opacity-50"
             >
               <Play className="h-3.5 w-3.5" fill="currentColor" />

@@ -214,6 +214,7 @@ const CHANNEL: Record<Item["source"], string> = {
   email: "via Email",
   whatsapp: "via WhatsApp",
   upload: "Uploaded",
+  neo: "via Neo chat",
 };
 
 /**

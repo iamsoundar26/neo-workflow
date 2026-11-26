@@ -1,5 +1,21 @@
 import ReconCard from "./recon-card";
+import SourceFixCard from "./source-fix-card";
+import BankWorkspace from "./bank-ws";
+import BankReviewTable from "./bank-review-table";
+import MatchSettingsCard from "./bank-flow/settings-card";
+import BankFlowPanel from "./bank-flow/panel";
+import MatchCard from "./bank-flow/match-card";
+import StageCard from "./bank-flow/stage-card";
+import { useBankWs } from "@/hooks/pages/neo/use-bank-ws";
+import { useBankFlow } from "@/hooks/pages/neo/use-bank-review";
 import ReconReport from "./recon-report";
+import {
+  BankExactCard,
+  BankFinalCard,
+  BankLineCard,
+  BankSummaryCard,
+  BankSyncCard,
+} from "./bank-recon-cards";
 import DecisionsCard, { replyOf } from "./decisions-card";
 import React, { useState } from "react";
 import {
@@ -18,6 +34,7 @@ import {
   ShieldCheck,
   Stamp,
 } from "@/components/icons";
+import { Folder, Landmark } from "lucide-react";
 import type {
   NeoCard,
   NeoDecisionItem,
@@ -27,6 +44,8 @@ import type {
 } from "@/types/pages/neo";
 import { cn } from "@/lib/utils";
 import { canvasTitle, docShape, opensInCanvas } from "@/utils/pages/neo/canvas";
+import { DeskChat, DeskPanel, isRefCard } from "./voucher-desk";
+import ReviewGroups from "./bank-flow/groups";
 import { useRecon } from "@/hooks/pages/neo/use-recon";
 import { unanswered } from "@/utils/pages/neo/decisions";
 import AskOptions, { replyOfAsk } from "./ask-options";
@@ -43,6 +62,8 @@ type CardProps = {
   running: boolean;
   paused: boolean;
   onEditCard: (card: NeoCard) => void;
+  /** Answers the card the task is waiting on, where the card has its own buttons. */
+  onAnswer?: (value: string) => void;
   onRef: (ref: NeoRef) => void;
   onPause: () => void;
   onResume: () => void;
@@ -78,6 +99,7 @@ export const CardBody = ({
   running,
   paused,
   onEditCard,
+  onAnswer,
   onRef,
   onPause,
   onResume,
@@ -91,6 +113,30 @@ export const CardBody = ({
       return <ReconCard card={card} onRef={onRef} />;
     case "recon-report":
       return <ReconReport card={card} />;
+    case "bank-summary":
+      return <BankSummaryCard card={card} />;
+    case "bank-exact":
+      return <BankExactCard card={card} />;
+    case "bank-line":
+      return <BankLineCard card={card} />;
+    case "bank-final":
+      return <BankFinalCard />;
+    case "bank-sync":
+      return <BankSyncCard />;
+    case "bank-ws":
+      return <BankWorkspace />;
+    case "bank-review":
+      return card.quick ? <BankFlowPanel /> : expanded ? <BankReviewTable scope="flow" /> : <ReviewGroups message={m} summary={card.summary} />;
+    case "bank-match":
+      return <MatchCard />;
+    case "voucher-desk":
+      return expanded ? <DeskPanel card={card} /> : <DeskChat message={m} card={card} />;
+    case "bank-stage":
+      return <StageCard card={card} live={live} onAnswer={onAnswer} />;
+    case "match-settings":
+      return <MatchSettingsCard card={card} live={live} onAnswer={onAnswer} />;
+    case "source-fix":
+      return <SourceFixCard card={card} live={live} onAnswer={onAnswer} />;
     default:
       return null;
   }
@@ -99,6 +145,8 @@ export const CardBody = ({
 /** What kind of document it is, at a glance, in the header and the tile. */
 export const docIcon = (card: NeoCard) => {
   if (card.kind === "recon-report") return FileSpreadsheet;
+  if (card.kind === "voucher-desk") return Folder;
+  if (card.kind === "bank-ws" || card.kind === "bank-review") return card.kind === "bank-review" ? FileSpreadsheet : Landmark;
   switch (docShape(card)) {
     case "ledger":
       return Ledger;
@@ -174,6 +222,8 @@ const CanvasTile = ({
 }) => {
   // Recon tiles say where the run stands now, so they follow the store.
   useRecon();
+  useBankWs();
+  useBankFlow();
   const { title, meta } = canvasTitle(card);
   const Icon = docIcon(card);
   return (
@@ -392,11 +442,20 @@ const Message = ({
   // The guided run's choice is asked by the guide's annotation, not here.
   const guide =
     m.card?.kind === "guide-choice" || m.card?.kind === "guide-upload";
+  // The source-fix card carries its own buttons, so the thread draws none.
+  const ownButtons = m.card?.kind === "source-fix" ||
+    m.card?.kind === "bank-stage" ||
+    m.card?.kind === "match-settings";
 
   // These cards live in the prompt box, not in the thread.
   const inBox =
     m.card?.kind === "decisions" || m.card?.kind === "sources-upload";
-  const tiled = !!onOpenCanvas && opensInCanvas(m.card);
+  const tiled =
+    !!onOpenCanvas &&
+    opensInCanvas(m.card) &&
+    !isRefCard(m.card) &&
+    // The Review Table opened from bank reconciliation 2 is one tile per group.
+    !(m.card?.kind === "bank-review" && !m.card.quick);
   const risk =
     primary?.risk && primary.risk !== "read" ? RISK[primary.risk] : undefined;
 
@@ -458,7 +517,7 @@ const Message = ({
           }
         : null;
 
-  const buttons = live && m.actions && m.actions.length > 0 && (
+  const buttons = live && !ownButtons && m.actions && m.actions.length > 0 && (
     <div className="flex flex-wrap gap-2 max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center">
       {m.actions.map((a) => (
         <button
@@ -539,6 +598,7 @@ const Message = ({
             running={running}
             paused={paused}
             onEditCard={onEditCard}
+            onAnswer={onAnswer}
             onRef={onRef}
             onPause={onPause}
             onResume={onResume}

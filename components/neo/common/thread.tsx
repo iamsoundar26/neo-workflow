@@ -13,12 +13,14 @@ import {
 } from "@/components/icons";
 import { getState } from "@/components/inbox/v2/store";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { BANK3_AGENT_ID } from "@/config/pages/neo/mock-agents";
 import { useNeo } from "@/hooks/pages/neo/use-neo";
 import type { NeoRuntime } from "@/hooks/pages/neo/use-neo-runtime";
 import type { NeoMessage, NeoRef } from "@/types/pages/neo";
 import { cn } from "@/lib/utils";
 import { opensInCanvas, sameDoc } from "@/utils/pages/neo/canvas";
 import Message, { DocStrip } from "./message";
+import NeoAvatar, { type AvatarState } from "./neo-avatar";
 import TurnActions from "./turn-actions";
 import UserMessage from "./user-message";
 
@@ -97,6 +99,38 @@ export const NeoGlyph = ({ working }: { working?: boolean }) => (
   />
 );
 
+/** Bank reconciliation 3: one avatar above each reply (full width kept), which arrives block by block. */
+const Turn3 = ({
+  on,
+  state,
+  children,
+}: {
+  on: boolean;
+  state: AvatarState;
+  children: React.ReactNode;
+}) => {
+  const working = state === "thinking" || state === "writing";
+  return on ? (
+    <div className="flex flex-col">
+      {/* The avatar is the loading mark: it shows while Neo works, then folds away. */}
+      <div
+        aria-hidden={!working}
+        className={cn(
+          "grid transition-[grid-template-rows,opacity,margin] duration-300 ease-out motion-reduce:transition-none",
+          working ? "mb-3 grid-rows-[1fr] opacity-100" : "mb-0 grid-rows-[0fr] opacity-0"
+        )}
+      >
+        <div className="overflow-hidden">
+          <NeoAvatar state={state} />
+        </div>
+      </div>
+      <div className="neo-v3-body flex min-w-0 flex-col gap-5">{children}</div>
+    </div>
+  ) : (
+    <>{children}</>
+  );
+};
+
 type Props = {
   variant: "page" | "panel";
   onPrompt: (text: string) => void;
@@ -147,6 +181,7 @@ const SubtaskLine = ({
 const Thread = ({ variant, onPrompt, scope, header, onOpenScope }: Props) => {
   const neo = useNeo();
   const live = useLiveMessage(neo);
+  const v3 = neo.agentId === BANK3_AGENT_ID;
   const page = variant === "page";
   const { scopeOf } = neo;
   // The turns this view shows; in the chat, each subtask's first turn
@@ -314,6 +349,20 @@ const Thread = ({ variant, onPrompt, scope, header, onOpenScope }: Props) => {
                       onVersion={(n) => neo.switchVersion(t.user!.id, n)}
                     />
                   )}
+                  <Turn3
+                    on={v3}
+                    state={
+                      !running
+                        ? "idle"
+                        : neo.paused
+                          ? "paused"
+                          : waiting
+                            ? "waiting"
+                            : streaming
+                              ? "writing"
+                              : "thinking"
+                    }
+                  >
                   {segments(t.neo).map((seg) =>
                     Array.isArray(seg) ? (
                       <DocStrip
@@ -380,7 +429,11 @@ const Thread = ({ variant, onPrompt, scope, header, onOpenScope }: Props) => {
                         className="flex min-h-7 items-center text-body-3 font-medium text-pi-ink-2"
                         aria-live="polite"
                       >
-                        <span className={cn(!neo.paused && "neo-shimmer")}>
+                        <span
+                          className={cn(
+                            !neo.paused && (v3 ? "neo-v3-status" : "neo-shimmer")
+                          )}
+                        >
                           {status}
                         </span>
                       </p>
@@ -404,7 +457,7 @@ const Thread = ({ variant, onPrompt, scope, header, onOpenScope }: Props) => {
                             : "opacity-0 focus-within:opacity-100 group-hover/turn:opacity-100"
                         )}
                       >
-                        {last && (
+                        {last && !v3 && (
                           <span className="grid h-7 w-7 place-items-center">
                             <NeoGlyph />
                           </span>
@@ -435,6 +488,7 @@ const Thread = ({ variant, onPrompt, scope, header, onOpenScope }: Props) => {
                       </div>
                     )
                   )}
+                  </Turn3>
                 </section>
               );
             })}

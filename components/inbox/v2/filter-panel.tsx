@@ -236,11 +236,13 @@ export const QuickFilter = ({
   options,
   selected,
   onChange,
+  className,
 }: {
   label: string;
   options: FilterOption[];
   selected: string[];
   onChange: (next: string[]) => void;
+  className?: string;
 }) => (
   <Popover>
     <PopoverTrigger asChild>
@@ -249,6 +251,7 @@ export const QuickFilter = ({
       <FilterChip
         label={label}
         selectionType="multiple"
+        className={className}
         value={selected.map(
           (value) => options.find((o) => o.value === value)?.label ?? value
         )}

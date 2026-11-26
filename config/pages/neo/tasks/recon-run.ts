@@ -54,6 +54,8 @@ import { has } from "@/utils/pages/neo";
  * hooks/pages/neo/use-recon.ts.
  */
 
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
 const MONTH =
   /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|nov(ember)?|dec(ember)?)\b/i;
 
@@ -248,9 +250,43 @@ const askFiles = async (
       out.push(hit.name);
     }
   }
-  const books = sample.find((f) => f.kind === "books");
-  if (books) out.push(books.name);
+  // A clean upload: the Tally rows come in already corrected. The sample keeps
+  // its two bad rows, to show how they are caught.
+  out.push(sampleCorrection());
   return out;
+};
+
+/**
+ * Simulated revalidation of a corrected Tally export. The prototype reads only
+ * its own files, so a file passes when it is named as a correction (it
+ * contains "corrected", "fixed" or "clean"); anything else still has the
+ * rows it had, or is the wrong type.
+ */
+export const checkExport = (
+  name: string,
+  rows: { line: number; ref: string; issue: string }[]
+): { ok: true } | { ok: false; rows: typeof rows } => {
+  if (!/\.(csv|xlsx?)$/i.test(name))
+    return {
+      ok: false,
+      rows: [
+        {
+          line: 1,
+          ref: "",
+          issue: `${name} isn't a CSV or Excel export. Export it again from Tally as CSV.`,
+        },
+      ],
+    };
+  if (/corrected|fixed|clean/i.test(name)) return { ok: true };
+  return {
+    ok: false,
+    rows: rows.map((r) => ({
+      ...r,
+      issue: r.issue.startsWith("Still")
+        ? r.issue
+        : `Still unchanged: ${r.issue.charAt(0).toLowerCase()}${r.issue.slice(1)}`,
+    })),
+  };
 };
 
 const reconRun: NeoTask = {
@@ -441,60 +477,78 @@ const reconRun: NeoTask = {
         `${ready.rejected} row${ready.rejected === 1 ? "" : "s"} can't be read. They stay out unless you replace the file or accept a partial run.`
       );
 
-    // US-03 AC2: rejected rows are excluded only on purpose.
+    // US-03 AC2: rejected rows are excluded only on purpose. One short
+    // card: upload a corrected export (the picker opens on the tap and a
+    // good file goes straight on to matching), or run with what can be read.
+    let partial = 0;
     if (ready.rejected) {
       const bad = liveSources(run).filter((s) => s.rejected.length);
-      await api.checkpoint();
-      const { choice, picks } = await decide(
-        api,
-        "Rejected rows",
-        [
-          {
-            id: "rejected",
-            header: "Rejected rows",
-            question: `${ready.rejected} row${ready.rejected === 1 ? "" : "s"} in ${bad.map((s) => s.file).join(", ")} can't be read. What should this run do?`,
-            why: bad
-              .flatMap((s) =>
-                s.rejected.map((r) => `Line ${r.line}: ${r.reason}.`)
-              )
-              .join(" "),
-            recommended: "replace",
-            options: [
-              {
-                id: "replace",
-                label: "Replace with the corrected export",
-                hint: `${sampleCorrection()}, a new version of the books source`,
-              },
-              {
-                id: "partial",
-                label: `Run without the ${ready.rejected} rows`,
-                hint: "The result and every export say Partial",
-              },
-            ],
-          },
-        ],
-        [
-          { id: "go", label: "Continue", primary: true },
-          { id: "cancel", label: "Cancel the run" },
-        ]
+      const account = `HDFC Current Account · ${p.label}`;
+      let rows = bad.flatMap((s) =>
+        s.rejected.map((r) => ({
+          line: r.line,
+          ref: r.id.startsWith("line-") ? "" : r.id,
+          issue: r.reason.replace(/^No entry ID.*/, "No entry ID"),
+        }))
       );
-      if (choice !== "go") {
-        cancelRun(run.id);
-        await api.say(
-          "Cancelled. Nothing was run, so there's no result to review."
-        );
-        return "Cancelled";
-      }
-      if (picks.rejected === "replace") {
-        const fix = await api.step(`Reading ${sampleCorrection()}`, undefined, {
+      let attempt: string | undefined;
+      for (;;) {
+        await api.checkpoint();
+        const card: Extract<NeoCard, { kind: "source-fix" }> = {
+          kind: "source-fix",
+          account,
+          file: bad[0].file,
+          rows,
+          state: attempt ? "failed" : "ask",
+          attempt,
+        };
+        // One action keeps the card live; its own buttons answer it.
+        const choice = await api.card(card, [
+          { id: "cancel", label: "Cancel the run" },
+        ]);
+        if (choice === "cancel") {
+          cancelRun(run.id);
+          api.updateCard({ ...card, state: "retried", attempt: "Cancelled" });
+          await api.say(
+            "Cancelled. Nothing was run, so there's no result to review."
+          );
+          return "Cancelled";
+        }
+        if (choice === "partial") {
+          partial = ready.rejected;
+          api.updateCard({ ...card, state: "partial" });
+          run = acknowledgePartial(run.id);
+          break;
+        }
+        const name =
+          choice.slice("upload:".length) === "SAMPLE"
+            ? sampleCorrection()
+            : choice.slice("upload:".length);
+        api.updateCard({ ...card, state: "checking", attempt: name });
+        const fix = await api.step(`Checking ${name}`, undefined, {
           skills: ["S1", "S2"],
           tools: ["schema.validate"],
         });
-        await api.wait(500);
-        run = replaceSource(run.id, bad[0].file, sampleCorrection());
-        ready = readiness(run);
-        fix(`Books v2 · ${ready.rejected} rows rejected`);
-      } else run = acknowledgePartial(run.id);
+        await api.wait(900);
+        const verdict = checkExport(name, rows);
+        if (verdict.ok) {
+          run = replaceSource(run.id, bad[0].file, sampleCorrection());
+          ready = readiness(run);
+          fix(`Tally export v2 · ${ready.rejected} rows rejected`);
+          api.updateCard({ ...card, state: "fixed", attempt: name });
+          api.show({ kind: "recon", company, runId: run.id, view: "sources" });
+          break;
+        }
+        fix(`${name} · ${verdict.rows.length} still to fix`);
+        api.updateCard({
+          ...card,
+          state: "retried",
+          attempt: name,
+          rows: verdict.rows,
+        });
+        rows = verdict.rows;
+        attempt = name;
+      }
     }
 
     // 05 · Run reconciliation (R1–R8).
@@ -509,7 +563,7 @@ const reconRun: NeoTask = {
     run = executeRun(run.id);
     let v = currentVersion(run)!;
     matching(
-      `${v.groups.length} match groups · ${v.exceptions.length} exceptions`
+      `${v.groups.length} match groups · ${v.exceptions.length} exceptions${v.completeness === "partial" ? ` · Partial · ${plural(run.partialAck?.excluded || 0, "Tally row")} excluded` : ""}`
     );
     api.status(`Reconciling ${p.short}`, { done: 5, total: 8 });
 
@@ -571,7 +625,7 @@ const reconRun: NeoTask = {
     const byYou = v.groups.filter((g) => g.origin === "human").length;
     await api.say(
       [
-        `**${p.label}, version ${v.n}: ${v.groups.length} match groups${byYou ? `, ${byYou} linked by your answer` : ""}; ${v.exceptions.length} exceptions left.** ${v.completeness === "partial" ? "Partial: rejected rows were excluded. " : ""}Nothing was posted or changed in your books.`,
+        `**${p.label}, version ${v.n}: ${v.groups.length} match groups${byYou ? `, ${byYou} linked by your answer` : ""}; ${v.exceptions.length} exceptions left.** ${v.completeness === "partial" ? `**Partial · ${plural(partial || run.partialAck?.excluded || 0, "Tally row")} excluded.** ` : ""}Nothing was posted or changed in your books.`,
         "",
         v.exceptions.length
           ? `To resolve the ${v.exceptions.length} exceptions, open the report and pick an Action and a Reason in the yellow cells on its Exceptions sheet, here in Neo or in the downloaded file. Or tell me, for example “defer E1, payout file due 3 Oct”. Either way the reconciliation runs again as a new version.`

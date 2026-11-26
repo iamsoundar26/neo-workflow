@@ -148,6 +148,24 @@ html[data-neo-open] [data-sonner-toaster][data-y-position="bottom"] {
 .neo-prose blockquote {
   margin: 0 0 0.85em;
 }
+.neo-prose pre {
+  margin: 0.5rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--pi-line);
+  border-radius: var(--radius-sm, 6px);
+  padding: 0.75rem 0.875rem;
+}
+.neo-prose pre code {
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+  display: block;
+  background: none;
+  padding: 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  white-space: pre;
+}
 .neo-prose strong {
   font-weight: 600;
   color: var(--pi-ink);
@@ -805,4 +823,105 @@ html[data-neo-open] [data-sonner-toaster][data-y-position="bottom"] {
 }
 .neo-fade-in {
   animation: neo-fade-in 280ms ease-out both;
+}
+
+/* ---- Bank reconciliation 3: avatar and arrival motion (23 Nov 2026) ---- */
+.neo-avatar svg * { transform-box: fill-box; transform-origin: center; }
+.neo-avatar { transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+.neo-avatar:active { transform: scale(0.88); }
+.neo-avatar-halo {
+  background: radial-gradient(closest-side, rgba(224, 168, 107, 0.28), rgba(224, 168, 107, 0));
+  opacity: 0;
+  transition: opacity 500ms ease;
+}
+.neo-star { transition: transform 600ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 400ms ease; }
+.neo-dot { opacity: 0; transform: scale(0.4); transition: opacity 300ms ease, transform 300ms ease; }
+.neo-avatar[data-state="thinking"] .neo-dot,
+.neo-avatar[data-state="writing"] .neo-dot,
+.neo-avatar[data-state="waiting"] .neo-dot { opacity: 1; transform: none; }
+
+/* idle: a glint now and then */
+.neo-glint { animation: neo-glint 6s ease-in-out 1.2s infinite; }
+@keyframes neo-glint {
+  0%, 70% { transform: translateX(0); }
+  100% { transform: translateX(60px); }
+}
+/* thinking: dots rise in a wave, sparkle turns, halo breathes */
+.neo-avatar[data-state="thinking"] .neo-avatar-halo,
+.neo-avatar[data-state="writing"] .neo-avatar-halo { opacity: 1; animation: neo-av-halo 2.2s ease-in-out infinite; }
+.neo-avatar[data-state="thinking"] .neo-star { animation: neo-turn 6s linear infinite; }
+.neo-avatar[data-state="thinking"] .neo-dot { animation: neo-wave 1.1s ease-in-out infinite; }
+.neo-avatar[data-state="thinking"] .neo-dot-2 { animation-delay: 0.14s; }
+.neo-avatar[data-state="thinking"] .neo-dot-3 { animation-delay: 0.28s; }
+/* writing: quicker, the sparkle twinkles */
+.neo-avatar[data-state="writing"] .neo-star { animation: neo-twinkle 0.9s ease-in-out infinite; }
+.neo-avatar[data-state="writing"] .neo-dot { animation: neo-wave 0.6s ease-in-out infinite; }
+.neo-avatar[data-state="writing"] .neo-dot-2 { animation-delay: 0.08s; }
+.neo-avatar[data-state="writing"] .neo-dot-3 { animation-delay: 0.16s; }
+/* waiting for you: dots hold, the last blinks */
+.neo-avatar[data-state="waiting"] .neo-dot-3 { animation: neo-blink 1.4s ease-in-out infinite; }
+.neo-avatar[data-state="waiting"] .neo-avatar-halo { opacity: 0; }
+/* paused: held and dimmed */
+.neo-avatar[data-state="paused"] svg { filter: grayscale(0.7); opacity: 0.7; }
+/* hover: a quarter turn, the dots ripple */
+.neo-avatar:hover .neo-star { transform: rotate(90deg) scale(1.08); }
+.neo-avatar:hover .neo-dot { animation: neo-wave 0.7s ease-in-out 1; }
+.neo-avatar:hover .neo-dot-2 { animation-delay: 0.08s; }
+.neo-avatar:hover .neo-dot-3 { animation-delay: 0.16s; }
+/* done / click: pop and three sparks */
+.neo-star-pop { animation: neo-av-pop 700ms cubic-bezier(0.34, 1.56, 0.64, 1) 1; }
+.neo-spark { opacity: 0; }
+.neo-sparks.is-on .neo-spark { animation: neo-spark 700ms ease-out 1; }
+.neo-sparks.is-on .neo-spark-1 { --sx: -13px; --sy: -13px; }
+.neo-sparks.is-on .neo-spark-2 { --sx: 15px; --sy: -11px; }
+.neo-sparks.is-on .neo-spark-3 { --sx: 2px; --sy: 16px; }
+@keyframes neo-av-halo { 0%, 100% { transform: scale(0.85); opacity: 0.6; } 50% { transform: scale(1.2); opacity: 1; } }
+@keyframes neo-turn { to { transform: rotate(360deg); } }
+@keyframes neo-twinkle { 0%, 100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.18) rotate(45deg); filter: brightness(1.15); } }
+@keyframes neo-wave { 0%, 100% { transform: translateY(0); opacity: 0.55; } 40% { transform: translateY(-5px); opacity: 1; } }
+@keyframes neo-blink { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+@keyframes neo-av-pop { 0% { transform: scale(0.6) rotate(-30deg); } 60% { transform: scale(1.25) rotate(10deg); } 100% { transform: scale(1) rotate(0); } }
+@keyframes neo-spark { 0% { opacity: 1; transform: translate(0, 0) scale(1); } 100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0.2); } }
+
+/* Each block of the answer clears from a soft blur as it arrives. */
+.neo-v3-body > * {
+  animation: neo-v3-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes neo-v3-in {
+  from { opacity: 0; transform: translateY(8px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+/* Table rows of the answer follow one after another. */
+.neo-v3-body tbody tr {
+  animation: neo-v3-row 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.neo-v3-body tbody tr:nth-child(1) { animation-delay: 80ms; }
+.neo-v3-body tbody tr:nth-child(2) { animation-delay: 140ms; }
+.neo-v3-body tbody tr:nth-child(3) { animation-delay: 200ms; }
+.neo-v3-body tbody tr:nth-child(4) { animation-delay: 260ms; }
+.neo-v3-body tbody tr:nth-child(5) { animation-delay: 320ms; }
+.neo-v3-body tbody tr:nth-child(n + 6) { animation-delay: 380ms; }
+@keyframes neo-v3-row {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+/* A soft sweep of colour under the status line while Neo thinks. */
+.neo-v3-status {
+  background: linear-gradient(90deg, #6b7bd6, #9aa8ff, #6b7bd6);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: neo-v3-sweep 1.8s linear infinite;
+}
+@keyframes neo-v3-sweep {
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .neo-avatar *,
+  .neo-avatar-halo,
+  .neo-v3-body > *,
+  .neo-v3-body tbody tr,
+  .neo-v3-status { animation: none !important; }
+  .neo-v3-status { color: inherit; background: none; }
 }

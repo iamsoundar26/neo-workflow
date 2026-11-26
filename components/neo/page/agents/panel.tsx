@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -15,10 +15,12 @@ import {
 } from "lucide-react";
 import { NeoAgents as SeamIcon } from "@/components/icons";
 import type { AgentProfile } from "@/types/pages/neo/agents";
-import { RECON_AGENT_ID } from "@/config/pages/neo/mock-agents";
+import { RECON_AGENT_ID, runPromptFor } from "@/config/pages/neo/mock-agents";
 import { useStartChat } from "@/hooks/pages/neo/use-start-chat";
 import { JOBS } from "@/config/pages/neo/skills";
 import { agentPageHref } from "./bar";
+import Workflow from "./workflow";
+import { flowFor } from "@/config/pages/neo/agent-flow";
 import { Button } from "@/components/ui/button";
 import {
   removeMyAgent,
@@ -60,6 +62,8 @@ const AgentPanel = ({ agent, company, onClose, inChat }: Props) => {
   const unavailable = live ? JOBS[0].onlyFor?.(company) : undefined;
   const Icon = AGENT_ICON[agent.id] || FileSearch;
   const Access = agent.access === "Read-only" ? Lock : PenLine;
+  const flow = flowFor(agent.id);
+  const [tab, setTab] = useState<"overview" | "workflow">("overview");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -97,7 +101,7 @@ const AgentPanel = ({ agent, company, onClose, inChat }: Props) => {
             type="button"
             disabled={!!unavailable}
             title={unavailable}
-            onClick={() => void chat("Reconcile September")}
+            onClick={() => void chat(runPromptFor(agent.id))}
             className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-primary text-[14px] font-semibold text-primary-foreground hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border disabled:opacity-50"
           >
             <Play className="h-4 w-4" />
@@ -108,7 +112,7 @@ const AgentPanel = ({ agent, company, onClose, inChat }: Props) => {
             {agent.eta || "Coming soon"}
           </p>
         )}
-        {live && (
+        {live && agent.id === RECON_AGENT_ID && (
           <Link
             href={agentPageHref(agent.id)}
             className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-md text-body-3 font-medium text-pi-body hover:bg-pi-fill hover:text-pi-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border"
@@ -120,7 +124,28 @@ const AgentPanel = ({ agent, company, onClose, inChat }: Props) => {
       </div>
       )}
 
-      <AgentBody agent={agent} />
+      {flow && (
+        <div role="tablist" aria-label="Agent details" className="flex flex-none gap-5 border-b border-pi-line px-5">
+          {(["overview", "workflow"] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={tab === k}
+              data-testid={`agent-tab-${k}`}
+              onClick={() => setTab(k)}
+              className={cn(
+                "-mb-px h-10 border-b-2 text-[14px] font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border",
+                tab === k ? "border-primary text-pi-ink" : "border-transparent text-pi-body hover:text-pi-ink"
+              )}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {flow && tab === "workflow" ? <Workflow steps={flow} /> : <AgentBody agent={agent} />}
     </aside>
   );
 };
@@ -313,7 +338,7 @@ export const MyAgentPanel = ({
   }, [onClose]);
   const Access = a.access === "Read only" ? Lock : PenLine;
   const run = () =>
-    void chat(a.fromId ? "Reconcile September" : `Run my agent: ${a.name}`);
+    void chat(a.fromId ? runPromptFor(a.fromId) : `Run my agent: ${a.name}`);
   return (
     <aside
       aria-label={a.name}

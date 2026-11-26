@@ -7,6 +7,9 @@ import {
   liveSources,
   readiness,
 } from "@/hooks/pages/neo/use-recon";
+import { deriveWs, getWs } from "@/hooks/pages/neo/use-bank-ws";
+import { REVIEW_INFO } from "@/config/pages/neo/mock-bank-review";
+import { flowStats } from "@/hooks/pages/neo/use-bank-review";
 import { reportName } from "@/utils/pages/neo/recon-workbook";
 
 /**
@@ -17,7 +20,11 @@ import { reportName } from "@/utils/pages/neo/recon-workbook";
  * prompt box.
  */
 export const opensInCanvas = (card?: NeoCard) =>
-  card?.kind === "recon" || card?.kind === "recon-report";
+  card?.kind === "recon" ||
+  card?.kind === "recon-report" ||
+  card?.kind === "bank-ws" ||
+  card?.kind === "bank-review" ||
+  card?.kind === "voucher-desk";
 
 /** The tile's name and one-line summary for a document card. */
 export const canvasTitle = (card: NeoCard): { title: string; meta: string } => {
@@ -68,6 +75,30 @@ export const canvasTitle = (card: NeoCard): { title: string; meta: string } => {
             : `Version ${v.n} · ${v.groups.length} groups · ${v.exceptions.filter((e) => !e.deferred).length} open · ${REVIEW_LABEL[v.review]}`,
       };
     }
+    case "bank-ws": {
+      const ws = getWs();
+      if (!ws.run) return { title: "Bank Reconciliation", meta: "Cleared" };
+      const c = deriveWs(ws).counts;
+      return {
+        title: "Bank Reconciliation",
+        meta: `HDFC Current A/c · September 2026 · ${c.pending.toLocaleString("en-IN")} pending · ${(c.approvedMatches + c.approvedNew).toLocaleString("en-IN")} approved`,
+      };
+    }
+    case "bank-review": {
+      // Both bank reconciliations keep their approvals in the flow run.
+      const f = flowStats();
+      return {
+        title: "Review Table",
+        meta: `${REVIEW_INFO.bankLedger} · ${f.pending} to approve · ${f.approved} approved`,
+      };
+    }
+    case "voucher-desk": {
+      const n = card.files.length;
+      return {
+        title: "Voucher Desk",
+        meta: `${n} ${n === 1 ? "file" : "files"} from this upload`,
+      };
+    }
     default:
       return { title: "Document", meta: "" };
   }
@@ -79,7 +110,13 @@ export const canvasTitle = (card: NeoCard): { title: string; meta: string } => {
  * store, so the latest showing is the document; earlier tiles open it too.
  */
 export const canvasKey = (card: NeoCard): string | null =>
-  card.kind === "recon-report"
+  card.kind === "voucher-desk"
+    ? `desk:${card.batchId}`
+    : card.kind === "bank-review"
+    ? "bank-review"
+    : card.kind === "bank-ws"
+    ? `bank-ws:${card.runId}`
+    : card.kind === "recon-report"
     ? `recon-report:${card.runId}:${card.version}`
     : card.kind === "recon"
       ? `recon:${card.view}:${card.view === "config" ? card.company : card.runId}`
@@ -93,7 +130,13 @@ export const canvasKey = (card: NeoCard): string | null =>
 export type DocShape = "ledger" | "rulebook" | "statement" | "record";
 
 export const docShape = (card: NeoCard): DocShape => {
-  if (card.kind === "recon-report") return "ledger";
+  if (
+    card.kind === "recon-report" ||
+    card.kind === "bank-ws" ||
+    card.kind === "bank-review" ||
+    card.kind === "voucher-desk"
+  )
+    return "ledger";
   if (card.kind !== "recon") return "record";
   if (card.view === "config") return "rulebook";
   if (card.view === "review") return "statement";

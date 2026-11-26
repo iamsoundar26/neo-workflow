@@ -690,6 +690,9 @@ export const useSalesBatches = (companyId: string) => {
   );
 };
 
+/** The batch as it stands now, for code outside React (Neo's tasks). */
+export const getSalesBatch = (id: string) => find(id);
+
 export const useSalesBatch = (id?: string) => {
   const all = useSyncExternalStore(subscribe, getEntries, getEntries);
   return id ? all.find((e) => e.batch.importBatchUuid === id) : undefined;

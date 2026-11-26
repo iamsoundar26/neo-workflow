@@ -13,9 +13,9 @@ import NeoNav from "./nav";
 import { useNeo } from "@/hooks/pages/neo/use-neo";
 import { awaitingYou, markUnread, setViewing } from "@/hooks/pages/neo/use-unread";
 
-export type NeoPageId = "chat" | "agents";
+export type NeoPageId = "chat" | "agents" | "policy";
 
-export const NEO_PAGES: NeoPageId[] = ["chat", "agents"];
+export const NEO_PAGES: NeoPageId[] = ["chat", "agents", "policy"];
 
 export const neoHref = (page: NeoPageId) =>
   page === "chat" ? "/inbox?module=NEO" : `/inbox?module=NEO&page=${page}`;
@@ -23,6 +23,7 @@ export const neoHref = (page: NeoPageId) =>
 const PAGE_TITLE: Record<NeoPageId, string> = {
   chat: "Chat",
   agents: "Agents",
+  policy: "Accounting policy",
 };
 
 /**

@@ -213,6 +213,9 @@ import {
 } from "@/hooks/pages/inbox/use-grid-keyboard";
 import KeyboardShortcuts from "./keyboard-shortcuts";
 import PreparedTag from "@/components/neo/common/prepared-tag";
+import BankReconTest from "@/components/inbox/v2/bank-recon";
+import Settings from "@/components/inbox/v2/settings";
+import NeoPolicy from "@/components/neo/page/policy";
 import NeoPage, { NEO_PAGES, type NeoPageId } from "@/components/neo/page";
 import NeoChat from "@/components/neo/page/chat";
 import NeoAgents from "@/components/neo/page/agents";
@@ -368,7 +371,7 @@ const columns = [
   "User",
   "Received",
 ];
-const sourceLabels = { email: "Email", whatsapp: "WhatsApp", upload: "Upload" };
+const sourceLabels = { email: "Email", whatsapp: "WhatsApp", upload: "Upload", neo: "Neo chat" };
 
 /**
  * How a document arrived, said in words.
@@ -484,7 +487,7 @@ const cellValue = (x: Item, column: string): string | number => {
     case "File":
       return x.file.name;
     case "Source":
-      return x.source;
+      return sourceLabels[x.source];
     case "User":
       return senderUser(x);
     case "Vendor":
@@ -1337,6 +1340,8 @@ export default function Workspace() {
     Neo is one place: Chat and Skills (21 Oct 2026, phase one is three-way
     reconciliation only). An old ?page= lands on the chat.
   */
+  const bankReconModule = router.query.module === "BANKRECON";
+  const settingsModule = router.query.module === "SETTINGS";
   const neoModule = router.query.module === "NEO";
   const neoPage: NeoPageId | undefined = neoModule
     ? NEO_PAGES.includes(router.query.page as NeoPageId)
@@ -1969,7 +1974,11 @@ export default function Workspace() {
   };
   const navId = neoPage
     ? "neo"
-    : gstModule
+    : settingsModule
+      ? "settings"
+      : bankReconModule
+      ? "bank-recon"
+      : gstModule
       ? "gst"
       : coaModule
         ? "chart-of-accounts"
@@ -1992,6 +2001,14 @@ export default function Workspace() {
     }
     if (navItemId === "dashboard") {
       setDialog("dashboard");
+      return;
+    }
+    if (navItemId === "settings") {
+      void router.push("/inbox?module=SETTINGS");
+      return;
+    }
+    if (navItemId === "bank-recon") {
+      void router.push("/inbox?module=BANKRECON");
       return;
     }
     if (navItemId === "gst") {
@@ -3508,10 +3525,16 @@ export default function Workspace() {
             <NeoPage page={neoPage}>
               {neoPage === "chat" ? (
                 <NeoChat />
+              ) : neoPage === "policy" ? (
+                <NeoPolicy />
               ) : (
                 <NeoAgents key={state.company} company={state.company} />
               )}
             </NeoPage>
+          ) : settingsModule ? (
+            <Settings key={state.company} companyName={company.name} />
+          ) : bankReconModule ? (
+            <BankReconTest key={state.company} />
           ) : gstModule ? (
             <GstReconciliation
               key={state.company}
@@ -6296,8 +6319,8 @@ export default function Workspace() {
             }
           </Stat>
           <Stat label="Channel mix">
-            {["email", "whatsapp", "upload"]
-              .map((s) => `${s}: ${all.filter((x) => x.source === s).length}`)
+            {(["email", "whatsapp", "upload", "neo"] as const)
+              .map((s) => `${sourceLabels[s]}: ${all.filter((x) => x.source === s).length}`)
               .join(" · ")}
           </Stat>
         </dl>

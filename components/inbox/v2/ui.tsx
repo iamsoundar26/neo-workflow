@@ -248,16 +248,23 @@ export const FieldCard = ({
   title,
   children,
   className,
+  plain,
 }: {
   title?: string;
   children: React.ReactNode;
   className?: string;
+  /** Lay the children out yourself, inside the same panel. */
+  plain?: boolean;
 }) => (
   <section className={cn("rounded-md bg-section p-5", className)}>
     {title ? <h2 className={cn(T.section, "mb-4")}>{title}</h2> : null}
-    <div className="grid grid-cols-1 gap-x-[30px] gap-y-6 sm:grid-cols-2">
-      {children}
-    </div>
+    {plain ? (
+      children
+    ) : (
+      <div className="grid grid-cols-1 gap-x-[30px] gap-y-6 sm:grid-cols-2">
+        {children}
+      </div>
+    )}
   </section>
 );
 

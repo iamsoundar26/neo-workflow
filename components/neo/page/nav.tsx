@@ -11,6 +11,7 @@ import {
   Pencil,
   Plus,
   Search,
+  ShieldCheck,
   SquarePen,
   Star,
   Trash2,
@@ -50,6 +51,7 @@ const ICON_BTN =
 const ITEMS: { id: NeoPageId; label: string; icon: typeof NeoStar }[] = [
   { id: "chat", label: "Chat", icon: NeoChatIcon },
   { id: "agents", label: "Agents", icon: NeoAgents },
+  { id: "policy", label: "Accounting policy", icon: ShieldCheck },
 ];
 
 const ROW =
@@ -270,6 +272,18 @@ const NeoNav = ({ page, onPage, folded, onToggle, onHide }: Props) => {
           >
             <NeoAgents className="h-4 w-4 flex-none" />
             Agents
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            data-testid="nav-policy"
+            aria-current={page === "policy" ? "page" : undefined}
+            onClick={() => onPage("policy")}
+            className={cn(ITEM, page === "policy" ? on : idle)}
+          >
+            <ShieldCheck className="h-4 w-4 flex-none" />
+            Accounting policy
           </button>
         </li>
       </ul>

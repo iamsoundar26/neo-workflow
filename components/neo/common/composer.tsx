@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { Paperclip } from "lucide-react";
 import { ArrowUp, FileText, Plus, Slash, Square, X } from "@/components/icons";
+import { BANK3_AGENT_ID } from "@/config/pages/neo/mock-agents";
 import { useNeo } from "@/hooks/pages/neo/use-neo";
 import { NEO_COMMANDS } from "@/config/pages/neo/suggestions";
 import type {
@@ -37,6 +38,53 @@ type Props = {
   context?: React.ReactNode;
   /** The box sits near the top (Neo's empty home): the / menu opens below. */
   menuBelow?: boolean;
+};
+
+/** Bank reconciliation 3: how much Neo thinks before it answers (Qwen's "Auto"). */
+const MODES = [
+  { id: "Auto", hint: "Neo decides how long to think" },
+  { id: "Fast", hint: "Quick answers, less checking" },
+  { id: "Thorough", hint: "Checks every line twice" },
+];
+const ModePill = () => {
+  const [mode, setMode] = useState("Auto");
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative order-3 ml-auto">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        onBlur={() => setOpen(false)}
+        className="flex h-8 items-center gap-1 rounded-full px-3 text-[13px] font-medium text-pi-body transition-colors hover:bg-pi-fill hover:text-pi-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border"
+      >
+        {mode}
+        <svg viewBox="0 0 12 12" className={cn("h-3 w-3 transition-transform duration-200", open && "rotate-180")} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4.5 6 7.5 9 4.5" /></svg>
+      </button>
+      {open && (
+        <div role="listbox" className="absolute bottom-full right-0 z-30 mb-2 w-60 rounded-2xl border border-pi-line-2 bg-background p-1.5 shadow-popover-shadow duration-150 animate-in fade-in-0 slide-in-from-bottom-1">
+          {MODES.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              role="option"
+              aria-selected={m.id === mode}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setMode(m.id);
+                setOpen(false);
+              }}
+              className={cn("flex w-full flex-col rounded-xl px-3 py-2 text-left hover:bg-pi-fill", m.id === mode && "bg-pi-fill/70")}
+            >
+              <span className="text-[13px] font-medium text-pi-ink">{m.id}</span>
+              <span className="text-[12px] text-pi-faint">{m.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 type Pick = { id: string; label: string; hint?: string; insert: string };
@@ -129,6 +177,8 @@ const Composer = forwardRef<HTMLTextAreaElement, Props>(
     // joined to it, and the box stays. Typing there answers the open
     // question in your own words, as "Something else".
     const asking = live?.card?.kind === "decisions" ? live : undefined;
+    // Bank reconciliation 3: a Qwen-style box, text above, tools below.
+    const v3 = neo.agentId === BANK3_AGENT_ID && !asking;
     // The journey step the run is on: its latest reasoning block's.
     const stageOf = (m: NeoMessage) => {
       const n = [...neo.messages]
@@ -179,7 +229,9 @@ const Composer = forwardRef<HTMLTextAreaElement, Props>(
             "relative z-10 border transition-[border-color,box-shadow,background-color] duration-200",
             asking
               ? "rounded-2xl border-pi-line-2 bg-background focus-within:border-pi-brand-border focus-within:ring-2 focus-within:ring-pi-brand-tint"
-              : "rounded-xl bg-background",
+              : v3
+                ? "rounded-3xl bg-background shadow-[0_2px_14px_rgba(16,24,40,0.07)]"
+                : "rounded-xl bg-background",
             !asking &&
               "border-pi-line-2 focus-within:border-pi-brand-border"
           )}
@@ -272,10 +324,14 @@ const Composer = forwardRef<HTMLTextAreaElement, Props>(
           <div
             className={cn(
               "flex items-end gap-1",
-              page ? "items-center px-2.5 py-2.5" : "px-2 py-1.5"
+              v3
+                ? "flex-wrap items-center px-3 pb-2.5 pt-3"
+                : page
+                  ? "items-center px-2.5 py-2.5"
+                  : "px-2 py-1.5"
             )}
           >
-            <div className="flex-none">
+            <div className={cn("flex-none", v3 && "order-2")}>
               <button
                 type="button"
                 aria-label="Attach files"
@@ -290,10 +346,11 @@ const Composer = forwardRef<HTMLTextAreaElement, Props>(
                   asking
                     ? "text-pi-body hover:bg-pi-fill hover:text-pi-ink"
                     : "text-pi-body hover:bg-pi-fill hover:text-pi-ink",
-                  page ? "h-8 w-8" : "h-9 w-9"
+                  page ? "h-8 w-8" : "h-9 w-9",
+                  v3 && "rounded-full border border-pi-line-2"
                 )}
               >
-                {asking ? (
+                {asking || v3 ? (
                   <Plus className="h-5 w-5" />
                 ) : (
                   <Paperclip className="h-[18px] w-[18px]" />
@@ -368,6 +425,12 @@ const Composer = forwardRef<HTMLTextAreaElement, Props>(
                     : "Review your answers above to continue"
                   : answering
                     ? `${live?.ask?.input?.placeholder || "Type your answer"} · Enter answers`
+                    : v3 &&
+                        busy &&
+                        (live?.card?.kind === "match-settings" ||
+                          live?.card?.kind === "bank-stage" ||
+                          live?.card?.kind === "source-fix")
+                      ? "Waiting for you above · Esc cancels"
                     : busy && live?.card?.kind === "guide-choice"
                       ? "Pick how to start in the guide · Esc stops"
                       : busy && live?.ask
@@ -390,12 +453,14 @@ const Composer = forwardRef<HTMLTextAreaElement, Props>(
                 asking
                   ? "placeholder:text-pi-faint disabled:opacity-75"
                   : "placeholder:text-pi-faint",
+                v3 && "order-1 basis-full !px-1 !pb-2",
                 page
                   ? "max-h-40 min-h-[32px] px-3 py-1 text-[16px] leading-6 sm:text-[14px] sm:leading-5"
                   : "max-h-44 min-h-[36px] py-1.5 text-[16px] leading-6 sm:text-[14px]"
               )}
             />
 
+            {v3 && <ModePill />}
             {busy && !asking && !answering ? (
               <button
                 type="button"
@@ -403,6 +468,7 @@ const Composer = forwardRef<HTMLTextAreaElement, Props>(
                 title={signOff || live?.ask ? "Cancel (Esc)" : "Stop (Esc)"}
                 onClick={onStop}
                 className={cn(
+                  v3 && "order-4 !rounded-full",
                   "grid h-8 w-8 flex-none place-items-center rounded-lg transition-[color,background-color,transform] duration-150 animate-in zoom-in-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border",
                   asking || live?.ask
                     ? "bg-background/80 text-pi-body shadow-contact ring-1 ring-inset ring-pi-line-2 hover:bg-pi-fill hover:text-pi-ink"
@@ -422,7 +488,7 @@ const Composer = forwardRef<HTMLTextAreaElement, Props>(
                 title="Send (Enter)"
                 disabled={asking ? !openQ || !value.trim() : !canSend}
                 onClick={asking ? sendTyped : onSend}
-                className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-primary text-primary-foreground transition-[opacity,transform] duration-150 animate-in zoom-in-75 hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border disabled:bg-pi-brand-border disabled:text-white"
+                className={cn(v3 && "order-4 !rounded-full !bg-pi-ink hover:!opacity-90 disabled:!bg-pi-line-2", "grid h-8 w-8 flex-none place-items-center rounded-lg bg-primary text-primary-foreground transition-[opacity,transform] duration-150 animate-in zoom-in-75 hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border disabled:bg-pi-brand-border disabled:text-white")}
               >
                 <ArrowUp className="h-4 w-4" />
               </button>

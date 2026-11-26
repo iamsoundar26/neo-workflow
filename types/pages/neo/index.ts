@@ -177,6 +177,133 @@ export type NeoCard =
       note?: string;
     }
   | {
+      /** The Bank Reconciliation artifact: opens the workspace in the side panel. */
+      kind: "bank-ws";
+      runId: string;
+    }
+  | {
+      /**
+       * The match results of the Bank reconciliation, in the chat: a flow
+       * diagram or a table, each group opening beside the chat. Reads the run.
+       */
+      kind: "bank-match";
+    }
+  | {
+      /**
+       * A question Neo asks once the matches are approved: create the entries,
+       * then sync them to Tally. Carries its own buttons.
+       */
+      kind: "bank-stage";
+      stage: "create" | "sync";
+    }
+  | {
+      /**
+       * The Review Table artifact: every bank line, as a sheet in the side
+       * panel, under the recon summary.
+       */
+      kind: "bank-review";
+      /** Settle exact matches and policy-drafted entries together, in one click. */
+      quick?: boolean;
+      /** The closing summary: the same table, without the approve buttons. */
+      summary?: boolean;
+    }
+  | {
+      /**
+       * The match settings, asked after the statement is read: three groups in
+       * plain words, an expanded Edit view, saved to the Accounting Policy. On
+       * later runs it is one line with a Review link.
+       */
+      kind: "match-settings";
+      /** Settings saved before: the card is one line. */
+      saved: boolean;
+      initial?: import("@/config/pages/neo/match-settings").MatchSettings;
+    }
+  | {
+      /**
+       * Tally rows that can't be read, as one short decision: upload a
+       * corrected export, or run with the rows that are readable. The card
+       * carries its own upload button, so the file picker opens on the tap.
+       */
+      kind: "source-fix";
+      account: string;
+      /** The Tally export the rows are in. */
+      file: string;
+      rows: { line: number; ref: string; issue: string }[];
+      state: "ask" | "failed" | "checking" | "retried" | "fixed" | "partial";
+      /** The file last tried. */
+      attempt?: string;
+    }
+  | {
+      /**
+       * What a chat upload became in Voucher Desk (the Inbox): a short
+       * summary and one chip that opens the desk in the side panel, filtered
+       * to exactly these documents.
+       */
+      kind: "voucher-desk";
+      batchId: string;
+      state: "processing" | "ready" | "failed";
+      /** Snapshot of what was uploaded, taken when it was processed. */
+      files: {
+        id: string;
+        name: string;
+        type: string;
+        party: string;
+        amount: number;
+      }[];
+      /** Why it failed, when it did. */
+      error?: string;
+      /**
+       * A spreadsheet of sales invoices: the chip opens the Sales module's own
+       * upload preview for this import batch, not the Inbox list.
+       */
+      sales?: { importBatchId: string; rows: number; attention: number };
+      /**
+       * A bank statement read in bank reconciliation: the chip opens its
+       * transactions in the Banking module's table.
+       */
+      statement?: { file: string; lines: number; source?: "ws" };
+    }
+  | {
+      /** Bank reconciliation: what Neo found, in three groups. */
+      kind: "bank-summary";
+      ledger: string;
+      period: string;
+      total: number;
+      matched: { n: number; amount: number };
+      check: { n: number; amount: number };
+      fresh: { n: number; amount: number };
+      /** Vouchers in Tally the statement doesn't show yet. */
+      inTallyOnly: { n: number; amount: number };
+    }
+  | {
+      /** The exact matches together, for one approval. Reads the live run. */
+      kind: "bank-exact";
+      lineIds: string[];
+      /** A group Neo set aside for one decision, instead of the exact matches. */
+      heading?: string;
+      body?: string;
+      /** Show how each line was matched. */
+      reasons?: boolean;
+    }
+  | {
+      /**
+       * One statement line and its voucher(s), or the new voucher drafted
+       * for it. Reads the live run; "Review and edit" opens the side panel.
+       */
+      kind: "bank-line";
+      lineId: string;
+      n: number;
+      of: number;
+    }
+  | {
+      /** Before sync: reconciled and pending counts, and the two balances. */
+      kind: "bank-final";
+    }
+  | {
+      /** The sync, before and after: what will be sent, and its status. */
+      kind: "bank-sync";
+    }
+  | {
       kind: "decisions";
       /** What the answers are for: "Before I draft September". */
       title: string;
