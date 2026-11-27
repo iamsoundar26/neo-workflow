@@ -24,25 +24,30 @@ Patterns that repeat in all of them:
 3. **Human steps are marked** (Wix, HoneyBook). In an accounting product this matters more than anywhere: "nothing reaches Tally until you confirm" is the promise.
 4. **Branches are labelled by outcome**, not by logic (Zapier: Success / Error).
 
-## What we built
+## What we built (v3, 27 Nov 2026: canvas, runs, Needs review)
 
-A **Workflow** tab beside Overview in the agent panel, for Bank reconciliation 3.
+Reference: the Korefi prototype's Agents and agent pages, the node types product wrote up, and Lindy-style canvases.
 
-- 8 steps, one card each. The icon, a word and the line above the title say who does it: **Neo does**, **You decide**, **In Tally**. Colour is never the only signal.
-- Steps that wait for you have a dashed border.
-- The match step splits into **Exact / Potential / No match**, each with what happens next.
-- A card opens to what it does, **Reads**, **Writes**, and a link to the setting that changes it (for example the Accounting policy page).
-- **Last run** switch: every step shows Done, its time and what it found ("9 exact · 6 potential · 6 no match").
-- The summary line says how many steps Neo does and how many are yours: "8 steps · Neo does 5, you decide 3".
+**Agents page.** Search, brand-coloured filter pills with counts (All, Running, Available, Drafts), and compact cards in sections. Each available card has its own **Run** button, so an agent starts without opening it. An agent that is running moves to **Running** and its card says where it is ("Reading the statement…") or what it is asking, with **View run** or **Review**. One type scale throughout: page title 16, section and card titles 14, descriptions 13, chips and meta 12.
 
-Files: `config/pages/neo/agent-flow.ts` (the steps), `components/neo/page/agents/workflow.tsx` (the view), `components/neo/page/agents/panel.tsx` (the tab).
+**Agent page.** The agent's name is the title in the bar, with its state (Available, Running, Needs you). A chat or the run on the left; on the right what it does, then two tabs.
+
+- **Preview** is an open canvas: dotted field, fixed top-to-bottom layout, nodes joined by arrows, the Decision node splitting into Exact, Potential and No match and joining again. Drag to move, zoom with the buttons, ⌘/Ctrl + scroll, + and −, 0 to fit. Clicking a node goes to its fields. While the agent runs, nodes show done, working or needs you.
+- **Configuration** is one scrolling list of every node's fields, each node under its own heading.
+- The left is the chat that edits the agent ("What should X do differently?"): chips or your own words change the fields, the changed node is scrolled to and ringed once, and every change can be undone.
+
+**The flow.** Run (on a card) or Run now (on the agent page) starts a **new Neo chat named for the agent**. That chat has **Edit details** in its header, which goes to the agent's page: its chat, Preview and Configuration. While the agent is running, its page shows a banner ("Running · Reading the statement…", or "Needs you · …") and its header button becomes **View run** / **Review**, which return to the chat. A running agent's card and its row in Needs review open the same chat. So the loop is: Agents, Run, chat, Edit details, agent page, View run, chat.
+
+**Needs review.** A page in Neo's menu, with a count on the menu item. It lists what any running agent has stopped to ask you (the agent, the question, a Review button that opens its chat). Empty, it says nothing needs review.
+
+Files: `config/pages/neo/agent-nodes.ts`, `hooks/pages/neo/use-agent-config.ts`, `hooks/pages/neo/use-agent-run.ts`, `components/neo/page/agent/` (page, canvas, configuration, run pane, chat), `components/neo/page/agents/index.tsx` (directory), `components/neo/page/review/index.tsx`.
 
 ## How to implement it in the real product
 
 **It is cheap because the agent already knows its steps.** The chat task already runs as named steps (`api.step`, `api.checkpoint`, `api.wait`). The Workflow view needs the same list as data, not new behaviour.
 
-1. **Data (small).** Each agent gets a `steps` array: id, title, actor (`neo` | `you` | `tally`), one-line summary, detail bullets, reads, writes, an optional setting link, optional branches. This is `FlowStep` in the prototype. Keep it in the agent's own definition so the steps and the task can't drift apart.
-2. **Endpoint (small).** `GET /api/neo/agents/:id/workflow` returns `{ steps }`. Add `?run=latest` to return `{ steps, run: { stepId, status, startedAt, finishedAt, summary }[] }`. Per-step status and time are already in the run log; only the one-line summary per step is new.
+1. **Data (small).** Each agent gets a `nodes` array: id, type (one of the eight), title, and the fields it takes (select, toggle, checks, text, or a custom block like the match rules). This is `AgentNode` in the prototype; the configuration panel is drawn from it, so adding a field is data only. Keep it in the agent's own definition so the steps and the task can't drift apart.
+2. **Endpoint (small).** `GET /api/neo/agents/:id/workflow` returns `{ nodes }`, and `PUT .../config` saves `{ values }` as the person edits. Preview needs nothing beyond the node list.
 3. **UI (reuse).** The tab uses the existing panel, tokens, Switch and Link. No graph library, no canvas. A column of cards is plain HTML and works on a phone.
 4. **Actor field decides the look.** One field drives icon, label and border; adding an agent never needs new UI.
 

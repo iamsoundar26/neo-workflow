@@ -36,7 +36,9 @@ import HomeBackdrop from "@/components/neo/common/home-backdrop";
 import { agentById } from "@/config/pages/neo/mock-agents";
 import { useMyAgents } from "@/hooks/pages/neo/use-my-agents";
 import { Button } from "@/components/ui/button";
-import { Info } from "lucide-react";
+import { Pencil } from "lucide-react";
+import { useRouter } from "next/router";
+import { agentOpenHref } from "@/components/neo/page/agents/bar";
 
 const NOTE =
   "Neo prepares; you approve. Nothing reaches your books without your click.";
@@ -77,6 +79,7 @@ const TONE: Record<TodayItem["tone"], string> = {
  */
 const NeoChat = () => {
   const neo = useNeo();
+  const router = useRouter();
   const mineAgents = useMyAgents();
   // The agent this chat is with: a suggested one, or one of your own.
   const agentInfo = useMemo(() => {
@@ -190,17 +193,16 @@ const NeoChat = () => {
             <NeoMenuButton />
           </div>
           {!empty && <ChatTitle compact />}
-          {/* Only a chat with an agent offers that agent's details. */}
+          {/* A chat with an agent leads back to the agent: its chat, preview and configuration. */}
           {agentInfo && (
             <Button
               variant="outline"
-              data-testid="view-details"
-              aria-pressed={neo.agentDetails}
-              onClick={() => neo.setAgentDetails(!neo.agentDetails)}
+              data-testid="edit-details"
+              onClick={() => void router.push(agentOpenHref(neo.agentId as string))}
               className="ml-auto h-8 rounded-lg px-3 text-[14px] font-medium"
             >
-              <Info className="h-4 w-4" />
-              View details
+              <Pencil className="h-4 w-4" />
+              Edit details
             </Button>
           )}
         </header>

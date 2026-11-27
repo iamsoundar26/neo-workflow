@@ -216,6 +216,8 @@ import PreparedTag from "@/components/neo/common/prepared-tag";
 import BankReconTest from "@/components/inbox/v2/bank-recon";
 import Settings from "@/components/inbox/v2/settings";
 import NeoPolicy from "@/components/neo/page/policy";
+import NeoAgentPage from "@/components/neo/page/agent";
+import NeoReview from "@/components/neo/page/review";
 import NeoPage, { NEO_PAGES, type NeoPageId } from "@/components/neo/page";
 import NeoChat from "@/components/neo/page/chat";
 import NeoAgents from "@/components/neo/page/agents";
@@ -3527,6 +3529,10 @@ export default function Workspace() {
                 <NeoChat />
               ) : neoPage === "policy" ? (
                 <NeoPolicy />
+              ) : neoPage === "agent" ? (
+                <NeoAgentPage />
+              ) : neoPage === "review" ? (
+                <NeoReview />
               ) : (
                 <NeoAgents key={state.company} company={state.company} />
               )}

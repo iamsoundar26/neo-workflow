@@ -64,9 +64,8 @@ const ReconWelcome = () => {
   }, [pending, company]);
 
   // Every load of the prototype is a first visit.
-  useEffect(() => {
-    if (!seen) openReconWelcome();
-  }, [seen]);
+  // It no longer opens by itself on the first visit (27 Nov 2026); it opens
+  // when asked for from the Guide, Skills or the reconciliation agent.
   useEffect(() => {
     if (!open) return;
     setPaused(false);

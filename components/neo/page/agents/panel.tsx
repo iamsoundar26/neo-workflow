@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -19,8 +19,6 @@ import { RECON_AGENT_ID, runPromptFor } from "@/config/pages/neo/mock-agents";
 import { useStartChat } from "@/hooks/pages/neo/use-start-chat";
 import { JOBS } from "@/config/pages/neo/skills";
 import { agentPageHref } from "./bar";
-import Workflow from "./workflow";
-import { flowFor } from "@/config/pages/neo/agent-flow";
 import { Button } from "@/components/ui/button";
 import {
   removeMyAgent,
@@ -62,8 +60,6 @@ const AgentPanel = ({ agent, company, onClose, inChat }: Props) => {
   const unavailable = live ? JOBS[0].onlyFor?.(company) : undefined;
   const Icon = AGENT_ICON[agent.id] || FileSearch;
   const Access = agent.access === "Read-only" ? Lock : PenLine;
-  const flow = flowFor(agent.id);
-  const [tab, setTab] = useState<"overview" | "workflow">("overview");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -124,28 +120,7 @@ const AgentPanel = ({ agent, company, onClose, inChat }: Props) => {
       </div>
       )}
 
-      {flow && (
-        <div role="tablist" aria-label="Agent details" className="flex flex-none gap-5 border-b border-pi-line px-5">
-          {(["overview", "workflow"] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              role="tab"
-              aria-selected={tab === k}
-              data-testid={`agent-tab-${k}`}
-              onClick={() => setTab(k)}
-              className={cn(
-                "-mb-px h-10 border-b-2 text-[14px] font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border",
-                tab === k ? "border-primary text-pi-ink" : "border-transparent text-pi-body hover:text-pi-ink"
-              )}
-            >
-              {k}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {flow && tab === "workflow" ? <Workflow steps={flow} /> : <AgentBody agent={agent} />}
+      <AgentBody agent={agent} />
     </aside>
   );
 };

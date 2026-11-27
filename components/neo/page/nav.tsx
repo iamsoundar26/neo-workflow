@@ -32,6 +32,8 @@ import { useNeo } from "@/hooks/pages/neo/use-neo";
 import { cn } from "@/lib/utils";
 import NeoSearch from "./nav-search";
 import { awaitingYou, useUnread } from "@/hooks/pages/neo/use-unread";
+import { useNeedsReview } from "@/hooks/pages/neo/use-agent-run";
+import { ClipboardCheck } from "lucide-react";
 import type { NeoPageId } from "./index";
 
 type Props = {
@@ -51,6 +53,7 @@ const ICON_BTN =
 const ITEMS: { id: NeoPageId; label: string; icon: typeof NeoStar }[] = [
   { id: "chat", label: "Chat", icon: NeoChatIcon },
   { id: "agents", label: "Agents", icon: NeoAgents },
+  { id: "review", label: "Needs review", icon: ClipboardCheck },
   { id: "policy", label: "Accounting policy", icon: ShieldCheck },
 ];
 
@@ -73,6 +76,7 @@ const OFF = "font-medium text-pi-ink-2 hover:bg-pi-fill hover:text-pi-ink";
 const NeoNav = ({ page, onPage, folded, onToggle, onHide }: Props) => {
   const neo = useNeo();
   const busy = !!neo.busy;
+  const waiting = useNeedsReview().length;
   const [searchOpen, setSearchOpen] = useState(false);
   // Cmd/Ctrl+K opens the search from anywhere in Neo.
   useEffect(() => {
@@ -263,15 +267,32 @@ const NeoNav = ({ page, onPage, folded, onToggle, onHide }: Props) => {
           <button
             type="button"
             data-testid="nav-agents"
-            aria-current={page === "agents" ? "page" : undefined}
+            aria-current={page === "agents" || page === "agent" ? "page" : undefined}
             onClick={() => onPage("agents")}
             className={cn(
               ITEM,
-              page === "agents" ? on : idle
+              page === "agents" || page === "agent" ? on : idle
             )}
           >
             <NeoAgents className="h-4 w-4 flex-none" />
             Agents
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            data-testid="nav-review"
+            aria-current={page === "review" ? "page" : undefined}
+            onClick={() => onPage("review")}
+            className={cn(ITEM, page === "review" ? on : idle)}
+          >
+            <ClipboardCheck className="h-4 w-4 flex-none" />
+            Needs review
+            {waiting > 0 && (
+              <span data-testid="review-count" className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-pi-warning-bg px-1.5 text-[12px] font-medium tabular-nums text-pi-warning">
+                {waiting}
+              </span>
+            )}
           </button>
         </li>
         <li>

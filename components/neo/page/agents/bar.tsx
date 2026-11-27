@@ -9,6 +9,8 @@ type Props = {
 };
 
 export const AGENTS_HREF = "/inbox?module=NEO&page=agents";
+/** An agent's own page: its chat, its workflow and its settings. */
+export const agentOpenHref = (id: string) => `/inbox?module=NEO&page=agent&agent=${id}`;
 /** An agent's details, in the panel beside the directory. */
 export const agentHref = (id: string) => `${AGENTS_HREF}&agent=${id}`;
 /** The live agent's full page: how it works, step by step. */

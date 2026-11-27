@@ -1118,7 +1118,9 @@ export const useNeoRuntime = () => {
     const first = messages.find((m) => m.role === "user");
     // Titled once Neo has answered, so the list doesn't flicker mid-request.
     const answered = messages.some((m) => m.role === "neo");
-    const title = answered ? titleFrom(first?.text || "") : "New chat";
+    // A chat with an agent is named for the agent.
+    const agentName = agentId ? agentById(agentId)?.name || getMyAgents().find((a) => a.id === agentId)?.name : undefined;
+    const title = answered ? agentName || titleFrom(first?.text || "") : "New chat";
     setChats((cs) => {
       const entry: NeoChat = {
         id: chatId,

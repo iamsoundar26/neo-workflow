@@ -1,468 +1,300 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import {
-  REVIEW_LABEL,
-  currentVersion,
-  latestRun,
-  useRecon,
-} from "@/hooks/pages/neo/use-recon";
-import {
-  MOCK_AGENTS,
-  RECON_AGENT_ID,
-  agentById,
-} from "@/config/pages/neo/mock-agents";
-import type { AgentCategory, AgentProfile } from "@/types/pages/neo/agents";
-import { cn } from "@/lib/utils";
-import AgentsBar from "./bar";
-import { AgentTile, FeaturedAgent } from "./card";
-import { JOBS } from "@/config/pages/neo/skills";
-import ReconAgent from "./recon";
-import {
-  ChevronDown,
-  Ellipsis,
-  Pause,
-  Play,
-  Plus,
-  Sparkles,
-  Trash2,
-} from "@/components/icons";
+import { Loader, Play, Plus, Search, Sparkles } from "lucide-react";
+import { MOCK_AGENTS, RECON_AGENT_ID, agentById, runPromptFor } from "@/config/pages/neo/mock-agents";
+import type { AgentProfile } from "@/types/pages/neo/agents";
 import { Button } from "@/components/ui/button";
 import { useNeoColumnHidden } from "@/components/neo/page";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useStartChat } from "@/hooks/pages/neo/use-start-chat";
-import {
-  removeMyAgent,
-  setMyAgentStatus,
-  useMyAgents,
-  type MyAgent,
-  type MyAgentStatus,
-} from "@/hooks/pages/neo/use-my-agents";
-import AgentPanel, { MyAgentPanel } from "./panel";
-import { agentHref } from "./bar";
-import { AGENTS_HREF } from "./bar";
+import { useNeo } from "@/hooks/pages/neo/use-neo";
+import { useAgentRun, type AgentRun } from "@/hooks/pages/neo/use-agent-run";
+import { useMyAgents, type MyAgent } from "@/hooks/pages/neo/use-my-agents";
+import { cn } from "@/lib/utils";
+import AgentsBar, { agentOpenHref } from "./bar";
+import { AGENT_ICON } from "./panel";
+import ReconAgent from "./recon";
 
 type Props = { company: string };
 
-const FILTERS: ("All" | AgentCategory)[] = [
-  "All",
-  "Reconciliation",
-  "Bookkeeping",
-  "Receivables",
-  "Compliance",
-];
-
 /**
- * Neo › Agents (21 Oct 2026). The directory: one card per agent, live
- * first, each with View agent. `?agent=` opens its details in a panel
- * beside the cards; `&view=page` opens the live agent's full page.
+ * Neo › Agents (27 Nov 2026), after the Korefi agents page: a search, filters
+ * with their counts, and agents in sections of cards: running, available,
+ * drafts, and the ones still to come. Opening one goes to its own page, with
+ * its chat and its workflow. The live recon agent's long-standing full page
+ * stays at `&agent=…&view=page`.
  */
 const NeoAgents = ({ company }: Props) => {
   const router = useRouter();
-  const id = router.query.agent as string | undefined;
-  const open = agentById(id);
-  const openMine = useMyAgents().find((a) => a.id === id);
-  // The full page is the live agent's alone; every other view is the
-  // directory with the agent's details beside it.
-  if (open?.id === RECON_AGENT_ID && router.query.view === "page")
-    return <ReconAgent company={company} />;
+  const open = agentById(router.query.agent as string | undefined);
+  if (open?.id === RECON_AGENT_ID && router.query.view === "page") return <ReconAgent company={company} />;
+  return <Directory />;
+};
+
+type Filter = "all" | "running" | "available" | "drafts";
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "running", label: "Running" },
+  { id: "available", label: "Available" },
+  { id: "drafts", label: "Drafts" },
+];
+
+type Card = {
+  id: string;
+  name: string;
+  description: string;
+  chip: string;
+  tone: "live" | "quiet" | "warn";
+  meta: string;
+  dashed?: boolean;
+  /** An agent Neo can run now. */
+  runnable?: boolean;
+  /** The live run, when this agent is running. */
+  run?: AgentRun;
+};
+
+const ofSuggested = (a: AgentProfile): Card => ({
+  id: a.id,
+  name: a.name,
+  description: a.goal,
+  chip: a.status === "live" ? "Available" : "Coming soon",
+  tone: a.status === "live" ? "live" : "quiet",
+  meta: a.category,
+  runnable: a.status === "live",
+});
+const ofMine = (a: MyAgent): Card => ({
+  id: a.id,
+  name: a.name,
+  description: a.goal,
+  chip: a.status === "active" ? "Running" : a.status === "paused" ? "Paused" : "Draft",
+  tone: a.status === "active" ? "live" : a.status === "paused" ? "warn" : "quiet",
+  meta: `Runs ${a.schedule.toLowerCase()}`,
+  dashed: a.status !== "active",
+  runnable: a.status === "active",
+});
+
+const CHIP = {
+  live: "bg-pi-success-bg text-pi-success",
+  quiet: "bg-pi-fill text-pi-body",
+  warn: "bg-pi-warning-bg text-pi-warning",
+  run: "bg-pi-brand-tint text-pi-brand",
+};
+
+/** A run is a Neo chat: the running agent opens there. */
+const RUN_HREF = "/inbox?module=NEO";
+
+const BTN = "relative z-10 inline-flex h-8 flex-none items-center gap-1.5 rounded-md px-3 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border disabled:opacity-50";
+
+/**
+ * One agent. The whole card opens it; Run is a button of its own, so an agent
+ * can be started without opening it. A running agent says where it is, or
+ * what it is asking, and offers its run instead.
+ */
+const AgentCard = ({ c, busy, onRun }: { c: Card; busy: boolean; onRun: (id: string) => void }) => {
+  const Icon = AGENT_ICON[c.id] || Sparkles;
+  const waiting = c.run?.state === "needs-you";
   return (
-    <Directory
-      company={company}
-      open={open}
-      openMine={openMine}
-      onClose={() =>
-        void router.push(AGENTS_HREF, undefined, { shallow: true })
-      }
-    />
+    <li className="relative" data-testid="agent-card" data-agent={c.id}>
+      <Link href={c.run ? RUN_HREF : agentOpenHref(c.id)} aria-label={c.name} className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border" />
+      <div
+        className={cn(
+          "pointer-events-none flex h-full flex-col rounded-xl border bg-background p-3.5 transition-colors",
+          c.dashed ? "border-dashed border-pi-line-2" : "border-pi-line",
+          waiting ? "border-pi-warning-line" : c.run && "border-pi-brand"
+        )}
+      >
+        <span className="flex items-center gap-2.5">
+          <span className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-pi-brand-tint text-pi-brand">
+            <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[14px] font-semibold leading-5 text-pi-ink">{c.name}</span>
+        </span>
+        {c.run ? (
+          <span className="mt-2 line-clamp-2 text-[13px] leading-5 text-pi-ink-2" data-testid="agent-run-line">
+            {waiting ? c.run.question || "Waiting for your decision" : `${c.run.line}…`}
+          </span>
+        ) : (
+          <span className="mt-2 line-clamp-2 text-[13px] leading-5 text-pi-body">{c.description}</span>
+        )}
+        <span className="mt-auto flex items-center justify-between gap-2 pt-3">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className={cn("inline-flex flex-none items-center gap-1.5 rounded-full px-2 py-0.5 text-[12px] font-medium leading-4", waiting ? CHIP.warn : c.run ? CHIP.run : CHIP[c.tone])} data-testid="agent-chip">
+            {c.run && !waiting && <Loader className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden />}
+            {!c.run && c.tone === "live" && <span className="h-1.5 w-1.5 rounded-full bg-pi-success-dot" />}
+            {waiting ? "Needs you" : c.run ? "Running" : c.chip}
+          </span>
+            <span className="truncate text-[12px] leading-4 text-pi-faint">{c.meta}</span>
+          </span>
+          {c.run ? (
+            <Link href={RUN_HREF} className={cn(BTN, "pointer-events-auto", waiting ? "bg-primary text-primary-foreground hover:bg-primary-hover" : "border border-pi-line-2 bg-background text-pi-ink hover:bg-pi-fill")} data-testid="card-view-run">
+              {waiting ? "Review" : "View run"}
+            </Link>
+          ) : c.runnable ? (
+            <button
+              type="button"
+              data-testid="card-run"
+              disabled={busy}
+              title={busy ? "Neo is working on another run" : `Run ${c.name}`}
+              onClick={() => onRun(c.id)}
+              className={cn(BTN, "pointer-events-auto bg-primary text-primary-foreground hover:bg-primary-hover")}
+            >
+              <Play className="h-3 w-3" fill="currentColor" aria-hidden />
+              Run
+            </button>
+          ) : null}
+        </span>
+      </div>
+    </li>
   );
 };
 
-type StatusFilter = "All" | "Active" | "Draft" | "Paused";
-const STATUS_FILTERS: StatusFilter[] = ["All", "Active", "Draft", "Paused"];
-const STATUS_LABEL: Record<MyAgentStatus, string> = {
-  active: "Active",
-  draft: "Draft",
-  paused: "Paused",
-};
-/** What each status means, in the words an owner would use. */
-const STATUS_HELP: Record<StatusFilter, string> = {
-  All: "Every agent you've created",
-  Active: "Switched on and ready to run",
-  Draft: "Saved, but not switched on yet",
-  Paused: "Stopped for now; resume any time",
-};
-const STATUS_TITLE: Record<MyAgentStatus, string> = {
-  active: STATUS_HELP.Active,
-  draft: STATUS_HELP.Draft,
-  paused: STATUS_HELP.Paused,
-};
-const STATUS_STYLE: Record<MyAgentStatus, string> = {
-  active: "bg-pi-success-bg text-pi-success",
-  draft: "bg-pi-fill text-pi-body",
-  paused: "bg-pi-warning-bg text-pi-warning",
-};
+const Section = ({ id, title, count, hint, children }: { id: string; title: string; count: number; hint: string; children: React.ReactNode }) => (
+  <section aria-labelledby={id} className="mt-6" data-testid={`section-${id}`}>
+    <h2 id={id} className="flex items-baseline gap-2 text-[14px] font-semibold leading-5 text-pi-ink">
+      {title}
+      <span className="text-[12px] font-normal tabular-nums text-pi-faint">{count}</span>
+    </h2>
+    <p className="mt-0.5 border-b border-pi-line pb-2 text-[13px] leading-5 text-pi-body">{hint}</p>
+    <ul className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{children}</ul>
+  </section>
+);
 
-/** "Just now", "5 min ago", "3 days ago". */
-const ago = (iso: string) => {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "Just now";
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)} hr ago`;
-  const d = Math.floor(s / 86400);
-  return `${d} day${d === 1 ? "" : "s"} ago`;
-};
-
-const Directory = ({
-  company,
-  open,
-  openMine,
-  onClose,
-}: Props & {
-  open?: AgentProfile;
-  openMine?: MyAgent;
-  onClose: () => void;
-}) => {
-  useRecon();
+const Directory = () => {
   const startChat = useStartChat();
+  const neo = useNeo();
+  const run = useAgentRun();
   const columnHidden = useNeoColumnHidden();
-  const mine = useMyAgents();
-  const [filter, setFilter] = useState<StatusFilter>("All");
-  const count = (f: StatusFilter) =>
-    f === "All" ? mine.length : mine.filter((a) => a.status === f.toLowerCase()).length;
-  const shown = useMemo(
-    () =>
-      mine.filter((a) => filter === "All" || a.status === filter.toLowerCase()),
-    [mine, filter]
-  );
-  // Ready to run first, then the ones still to come.
-  const suggested = [
-    ...MOCK_AGENTS.filter((a) => a.status === "live"),
-    ...MOCK_AGENTS.filter((a) => a.status !== "live"),
-  ];
+  // A suggested agent you have run is saved to My agents too; it is the same agent, shown once.
+  const mine = useMyAgents().filter((a) => !a.fromId);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [q, setQ] = useState("");
+  const [more, setMore] = useState(false);
+
+  const all = useMemo(() => {
+    const match = (c: Card) => !q.trim() || `${c.name} ${c.description}`.toLowerCase().includes(q.trim().toLowerCase());
+    // The agent Neo is running now leads Running, whoever made it.
+    const suggestedRun = run && MOCK_AGENTS.find((a) => a.id === run.agentId);
+    const mineRun = run && mine.find((a) => a.id === run.agentId);
+    const live: Card[] = run && suggestedRun ? [{ ...ofSuggested(suggestedRun), run }] : run && mineRun ? [{ ...ofMine(mineRun), run }] : [];
+    const liveIds = new Set(live.map((c) => c.id));
+    const running = [...live, ...mine.filter((a) => a.status === "active" && !liveIds.has(a.id)).map(ofMine)].filter(match);
+    const drafts = mine.filter((a) => a.status !== "active" && !liveIds.has(a.id)).map(ofMine).filter(match);
+    const available = MOCK_AGENTS.filter((a) => a.status === "live" && !liveIds.has(a.id)).map(ofSuggested).filter(match);
+    const soon = MOCK_AGENTS.filter((a) => a.status !== "live").map(ofSuggested).filter(match);
+    return { running, drafts, available, soon };
+  }, [mine, q, run]);
+
+  /** A run is a new chat, named for the agent: Run starts it there. */
+  const runAgent = (id: string) => {
+    if (neo.busy) return;
+    void startChat(runPromptFor(id));
+  };
+
+  const counts: Record<Filter, number> = {
+    all: all.running.length + all.drafts.length + all.available.length + all.soon.length,
+    running: all.running.length,
+    available: all.available.length,
+    drafts: all.drafts.length,
+  };
+  const show = (f: Filter) => filter === "all" || filter === f;
+  const busy = !!neo.busy;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* The bar only brings back the menu: on small screens, or when it is hidden. */}
       <div className={columnHidden ? "" : "lg:hidden"}>
         <AgentsBar />
       </div>
-      <div className="flex min-h-0 flex-1">
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[1080px] px-4 pb-16 pt-8 sm:px-8">
-            {mine.length === 0 ? (
-              <>
-                {/* Nothing made yet: say what agents are, and offer both ways in. */}
-                <header>
-                  <h1 className="text-[24px] font-semibold leading-8 text-pi-ink">
-                    Agents
-                  </h1>
-                  <p className="mt-1 max-w-[68ch] text-[14px] leading-5 text-pi-body [text-wrap:pretty]">
-                    Agents are helpers that do a whole accounting job for you,
-                    like matching your bank to your books. They prepare the
-                    work. You check it and approve it.
-                  </p>
-                </header>
-                <section
-                  aria-label="My agents"
-                  data-testid="agents-empty"
-                  className="mt-6 rounded-xl border border-dashed border-pi-line-2 px-4 py-10 text-center"
-                >
-                  <h2 className="text-[16px] font-semibold leading-6 text-pi-ink">
-                    You haven&apos;t created an agent yet
-                  </h2>
-                  <p className="mx-auto mt-1 max-w-[52ch] text-[14px] leading-5 text-pi-body">
-                    Start with a suggested agent below, or create your own and
-                    Neo will ask what it should do.
-                  </p>
-                  <div className="mt-5 flex flex-wrap justify-center gap-2">
-                    <Button
-                      data-testid="create-agent"
-                      onClick={() => void startChat("Create an agent")}
-                      className="h-9 rounded-lg px-4 text-[14px] font-semibold"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Create agent
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        document
-                          .getElementById("agents-suggested")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                      }
-                      className="h-9 rounded-lg px-4 text-[14px] font-medium"
-                    >
-                      See suggested agents
-                    </Button>
-                  </div>
-                </section>
-              </>
-            ) : (
-              <>
-            {/* Agents you have made, by where they stand. */}
-            <section aria-labelledby="my-agents">
-              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-                <div className="min-w-0">
-                  <h2
-                    id="my-agents"
-                    className="text-[18px] font-semibold leading-7 text-pi-ink"
-                  >
-                    My agents
-                  </h2>
-                  <p className="mt-1 max-w-[68ch] text-[14px] leading-5 text-pi-body [text-wrap:pretty]">
-                    Agents you&apos;ve created. A <strong className="font-semibold text-pi-ink">Draft</strong> won&apos;t run until you switch it on.
-                  </p>
-                </div>
-                <div className="flex flex-none items-center gap-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label={`Filter my agents by status. Showing ${filter === "All" ? "all statuses" : filter}`}
-                        data-testid="status-filter"
-                        className="inline-flex h-9 items-center gap-2 rounded-lg border border-pi-line-2 bg-background px-3 text-[14px] font-medium leading-5 text-pi-ink transition-colors hover:bg-pi-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pi-brand data-[state=open]:bg-pi-fill"
-                      >
-                        {filter === "All" ? "All statuses" : filter}
-                        <span className="tabular-nums text-pi-body">
-                          {count(filter)}
-                        </span>
-                        <ChevronDown className="h-4 w-4 text-pi-body" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-[280px]">
-                      <DropdownMenuRadioGroup
-                        value={filter}
-                        onValueChange={(v) => setFilter(v as StatusFilter)}
-                      >
-                        {STATUS_FILTERS.map((f) => (
-                          <DropdownMenuRadioItem
-                            key={f}
-                            value={f}
-                            data-testid={`filter-${f}`}
-                            className="items-start py-2"
-                          >
-                            <span className="block min-w-0 flex-1">
-                              <span className="flex items-center justify-between gap-3 text-[14px] font-medium leading-5 text-pi-ink">
-                                {f === "All" ? "All statuses" : f}
-                                <span className="tabular-nums text-pi-body">
-                                  {count(f)}
-                                </span>
-                              </span>
-                              <span className="block text-[12px] leading-4 text-pi-body">
-                                {STATUS_HELP[f]}
-                              </span>
-                            </span>
-                          </DropdownMenuRadioItem>
-                        ))}
-                      </DropdownMenuRadioGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <Button
-                    data-testid="create-agent"
-                    onClick={() => void startChat("Create an agent")}
-                    className="h-9 rounded-lg px-4 text-[14px] font-semibold"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Create agent
-                  </Button>
-                </div>
-              </div>
-
-              {shown.length === 0 ? (
-                <div className="mt-4 rounded-xl border border-dashed border-pi-line-2 px-4 py-8 text-center">
-                  <p className="text-[16px] font-semibold leading-6 text-pi-ink">
-                    {mine.length === 0
-                      ? "You haven't created an agent yet"
-                      : `No ${filter.toLowerCase()} agents`}
-                  </p>
-                  <p className="mx-auto mt-1 max-w-[52ch] text-[14px] leading-5 text-pi-body">
-                    {mine.length === 0
-                      ? "Start with a suggested agent below, or create your own and Neo will ask what it should do."
-                      : "Agents with that status will show here."}
-                  </p>
-                  {mine.length === 0 && (
-                    <div className="mt-4 flex flex-wrap justify-center gap-2">
-                      <Button
-                        onClick={() => void startChat("Create an agent")}
-                        className="h-9 rounded-lg px-4 text-[14px] font-semibold"
-                      >
-                        <Plus className="h-4 w-4" />
-                        Create agent
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          document
-                            .getElementById("agents-suggested")
-                            ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                        }
-                        className="h-9 rounded-lg px-4 text-[14px] font-medium"
-                      >
-                        See suggested agents
-                      </Button>
-                    </div>
+      <header className="flex h-14 flex-none items-center justify-between gap-3 border-b border-pi-line px-6 max-lg:hidden">
+        <h1 className="text-[16px] font-semibold leading-6 text-pi-ink">Agents</h1>
+        <Button data-testid="create-agent" onClick={() => void startChat("Create an agent")} className="h-9 rounded-md px-3.5 text-[14px] font-semibold">
+          <Plus className="h-4 w-4" />
+          Create agent
+        </Button>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-[1000px] px-4 pb-16 pt-5 sm:px-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="relative min-w-[220px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-pi-faint" aria-hidden />
+              <input
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search agents"
+                aria-label="Search agents"
+                data-testid="agents-search"
+                className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-[14px] text-pi-ink placeholder:text-pi-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border"
+              />
+            </label>
+            <div role="group" aria-label="Filter agents" className="flex flex-wrap gap-2">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  aria-pressed={filter === f.id}
+                  data-testid={`pill-${f.id}`}
+                  onClick={() => setFilter(f.id)}
+                  className={cn(
+                    "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border",
+                    filter === f.id ? "border-pi-brand bg-pi-brand-tint text-pi-brand" : "border-pi-line-2 bg-background text-pi-ink-2 hover:bg-pi-fill hover:text-pi-ink"
                   )}
-                </div>
-              ) : (
-                <ul className="mt-4 divide-y divide-pi-line-2 overflow-hidden rounded-xl border border-pi-line-2">
-                  {shown.map((a) => (
-                    <MyAgentRow
-                      key={a.id}
-                      agent={a}
-                      selected={openMine?.id === a.id}
-                    />
-                  ))}
-                </ul>
-              )}
-            </section>
-              </>
-            )}
-
-            {/* Agents we have built: open one for its plan. */}
-            <section aria-labelledby="agents-suggested" className="mt-10">
-              <h2
-                id="agents-suggested"
-                className="text-[18px] font-semibold leading-7 text-pi-ink"
-              >
-                Suggested agents
-              </h2>
-              <p className="mt-1 max-w-[68ch] text-[14px] leading-5 text-pi-body [text-wrap:pretty]">
-                Ready-made agents. Open one to see what it does, what it needs,
-                and what it never does.
-              </p>
-              <ul
-                className={cn(
-                  "mt-4 grid gap-4",
-                  open || openMine ? "grid-cols-1" : "sm:grid-cols-2"
-                )}
-              >
-                {suggested.map((a, i) => (
-                  <li key={a.id}>
-                    <AgentTile
-                      agent={a}
-                      index={i}
-                      selected={open?.id === a.id}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </section>
+                >
+                  {f.label}
+                  <span className={cn("rounded-full px-1.5 text-[12px] tabular-nums", filter === f.id ? "bg-background text-pi-brand" : "bg-pi-fill text-pi-body")}>{counts[f.id]}</span>
+                </button>
+              ))}
+            </div>
           </div>
+
+          {show("running") && all.running.length > 0 && (
+            <Section id="running" title="Running" count={all.running.length} hint="Working now, or switched on to run on their own.">
+              {all.running.map((c) => (
+                <AgentCard key={c.id} c={c} busy={busy} onRun={runAgent} />
+              ))}
+            </Section>
+          )}
+          {show("available") && all.available.length > 0 && (
+            <Section id="available" title="Available" count={all.available.length} hint="Ready to run. Press Run, or open one to see how it works.">
+              {all.available.map((c) => (
+                <AgentCard key={c.id} c={c} busy={busy} onRun={runAgent} />
+              ))}
+            </Section>
+          )}
+          {show("drafts") && all.drafts.length > 0 && (
+            <Section id="drafts" title="Drafts" count={all.drafts.length} hint="Agents being written. Switch one on to start it.">
+              {all.drafts.map((c) => (
+                <AgentCard key={c.id} c={c} busy={busy} onRun={runAgent} />
+              ))}
+            </Section>
+          )}
+          {filter === "all" && all.soon.length > 0 && (
+            <>
+              {more && (
+                <Section id="soon" title="Coming soon" count={all.soon.length} hint="Planned agents. Open one to see what it will do.">
+                  {all.soon.map((c) => (
+                    <AgentCard key={c.id} c={c} busy={busy} onRun={runAgent} />
+                  ))}
+                </Section>
+              )}
+              <div className="mt-6 flex justify-center">
+                <button
+                  type="button"
+                  data-testid="show-all"
+                  onClick={() => setMore((m) => !m)}
+                  className="h-9 rounded-md border border-pi-line-2 bg-background px-4 text-[14px] font-medium text-pi-ink hover:bg-pi-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border"
+                >
+                  {more ? "Show fewer agents" : `Show all agents (${all.soon.length} more)`}
+                </button>
+              </div>
+            </>
+          )}
+          {counts.all === 0 && (
+            <p className="mt-16 text-center text-[14px] text-pi-body">No agent matches “{q}”.</p>
+          )}
         </div>
-        {openMine && <MyAgentPanel key={openMine.id} agent={openMine} onClose={onClose} />}
-        {open && (
-          <AgentPanel
-            key={open.id}
-            agent={open}
-            company={company}
-            onClose={onClose}
-          />
-        )}
       </div>
     </div>
   );
 };
-
-/** One of your agents: what it does, where it stands, and its menu. */
-const MyAgentRow = ({
-  agent: a,
-  selected,
-}: {
-  agent: MyAgent;
-  selected?: boolean;
-}) => (
-  <li
-    data-testid="my-agent"
-    data-status={a.status}
-    className={cn(
-      "flex items-center gap-3 px-4 py-3 transition-colors",
-      selected ? "bg-pi-head-bg" : "hover:bg-pi-row-hover"
-    )}
-  >
-    <Link
-      href={agentHref(a.id)}
-      scroll={false}
-      aria-current={selected ? "true" : undefined}
-      aria-label={`Open ${a.name}`}
-      className="flex min-w-0 flex-1 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pi-brand focus-visible:ring-offset-2"
-    >
-    <span
-      aria-hidden
-      className="grid h-10 w-10 flex-none place-items-center rounded-xl border border-pi-line-2 bg-pi-head-bg text-pi-brand"
-    >
-      <Sparkles className="h-5 w-5" />
-    </span>
-    <span className="min-w-0 flex-1">
-      <span className="block truncate text-[16px] font-semibold leading-6 text-pi-ink">
-        {a.name}
-      </span>
-      <span className="block truncate text-[14px] leading-5 text-pi-body">
-        {a.goal}
-      </span>
-      <span className="block truncate text-[12px] leading-4 text-pi-body">
-        Uses {a.data} · Runs {a.schedule.toLowerCase()} · Edited {ago(a.updatedAt).toLowerCase()}
-      </span>
-    </span>
-    </Link>
-    <span
-      data-testid="my-agent-status"
-      title={STATUS_TITLE[a.status]}
-      className={cn(
-        "inline-flex h-6 flex-none items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium leading-4",
-        STATUS_STYLE[a.status]
-      )}
-    >
-      {a.status === "active" && (
-        <span className="h-1.5 w-1.5 rounded-full bg-pi-success-dot" />
-      )}
-      {STATUS_LABEL[a.status]}
-    </span>
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Options for ${a.name}`}
-          className="grid h-8 w-8 flex-none place-items-center rounded-md text-pi-body transition-colors hover:bg-pi-fill hover:text-pi-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border data-[state=open]:bg-pi-fill"
-        >
-          <Ellipsis className="h-4 w-4" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        {a.status === "active" ? (
-          <DropdownMenuItem
-            onSelect={() => setMyAgentStatus(a.id, "paused")}
-          >
-            <Pause className="mr-2 h-4 w-4" />
-            Pause
-          </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem
-            onSelect={() => setMyAgentStatus(a.id, "active")}
-          >
-            <Play className="mr-2 h-4 w-4" />
-            {a.status === "paused" ? "Resume" : "Switch on"}
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={() => removeMyAgent(a.id)}
-          className="text-status-error focus:text-status-error"
-        >
-          <Trash2 className="mr-2 h-4 w-4" />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  </li>
-);
 
 export default NeoAgents;

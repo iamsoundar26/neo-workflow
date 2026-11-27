@@ -1,5 +1,6 @@
 import type { AgentProfile } from "@/types/pages/neo/agents";
 import { NEO_AGENT, SKILLS } from "@/config/pages/neo/skills";
+import { getMyAgents } from "@/hooks/pages/neo/use-my-agents";
 
 /**
  * Neo's agents (21 Oct 2026). The first is the live Three Way Recon agent
@@ -15,14 +16,16 @@ export const BANK2_AGENT_ID = "bank-book-2";
 export const BANK3_AGENT_ID = "bank-book-3";
 
 /** The request that starts an agent's run in the chat. */
-export const runPromptFor = (id?: string) =>
-  id === BANK3_AGENT_ID
-    ? "Reconcile my bank statement 3"
-    : id === BANK2_AGENT_ID
-    ? "Reconcile my bank statement 2"
-    : id === BANK_AGENT_ID
-      ? "Reconcile my bank statement"
-      : "Check September";
+export const runPromptFor = (id?: string) => {
+  if (id === BANK3_AGENT_ID) return "Reconcile my bank statement 3";
+  if (id === BANK2_AGENT_ID) return "Reconcile my bank statement 2";
+  if (id === BANK_AGENT_ID) return "Reconcile my bank statement";
+  // An agent you made runs by name; its run follows its own workflow.
+  const mine = id ? getMyAgents().find((a) => a.id === id) : undefined;
+  if (mine) return `Run my agent: ${mine.name}`;
+  // Three-way reconciliation asks for the month and the files itself.
+  return "Run three-way reconciliation";
+};
 
 export const MOCK_AGENTS: AgentProfile[] = [
   {
